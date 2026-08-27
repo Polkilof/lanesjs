@@ -1,5 +1,5 @@
 <template>
-    <div ref="rootRef" class="rt" :style="rootStyle">
+    <div ref="rootRef" class="rt" :style="rootStyle" @scroll.passive="onScroll">
         <div class="rt__grid">
             <div class="rt__corner">
                 <slot name="corner" />
@@ -19,20 +19,20 @@
                 </div>
             </div>
 
-            <div class="rt__resources">
+            <div class="rt__resources" :style="{ height: totalHeight + 'px' }">
                 <div
-                    v-for="row in layout.rows"
-                    :key="row.resource.id"
+                    v-for="visible in visibleRows"
+                    :key="visible.row.resource.id"
                     class="rt__resource"
-                    :style="rowStyle(row)"
+                    :style="rowStyle(visible)"
                 >
-                    <slot name="resource" :resource="row.resource">
-                        {{ row.resource.title }}
+                    <slot name="resource" :resource="visible.row.resource">
+                        {{ visible.row.resource.title }}
                     </slot>
                 </div>
             </div>
 
-            <div class="rt__body" @click="onBodyClick">
+            <div class="rt__body" :style="{ height: totalHeight + 'px' }" @click="onBodyClick">
                 <!-- Накладки на всю висоту: по одному елементу на позначену колонку,
                      а не на кожну клітинку (рішення 09). -->
                 <div
@@ -45,17 +45,17 @@
                 />
 
                 <div
-                    v-for="row in layout.rows"
-                    :key="row.resource.id"
+                    v-for="visible in visibleRows"
+                    :key="visible.row.resource.id"
                     class="rt__row"
-                    :style="rowStyle(row)"
-                    :data-resource="row.resource.id"
+                    :style="rowStyle(visible)"
+                    :data-resource="visible.row.resource.id"
                 >
                     <div
-                        v-for="placed in row.backgrounds"
+                        v-for="placed in visible.row.backgrounds"
                         :key="placed.item.id"
                         class="rt__background"
-                        :class="props.itemClass?.(placed, row.resource)"
+                        :class="props.itemClass?.(placed, visible.row.resource)"
                         :style="{ left: px(placed.slotIndex), width: px(placed.slotSpan) }"
                         aria-hidden="true"
                     >
@@ -63,7 +63,7 @@
                     </div>
 
                     <div
-                        v-for="placed in row.bars"
+                        v-for="placed in visible.row.bars"
                         :key="placed.item.id"
                         class="rt__bar"
                         :class="[
@@ -71,12 +71,12 @@
                                 'rt__bar--clipped-start': placed.clippedStart,
                                 'rt__bar--clipped-end': placed.clippedEnd,
                             },
-                            props.itemClass?.(placed, row.resource),
+                            props.itemClass?.(placed, visible.row.resource),
                         ]"
                         :style="barStyle(placed)"
-                        @click.stop="emit('item-click', { item: placed.item, resource: row.resource })"
+                        @click.stop="emit('item-click', { item: placed.item, resource: visible.row.resource })"
                     >
-                        <slot name="item" :placed="placed" :resource="row.resource">
+                        <slot name="item" :placed="placed" :resource="visible.row.resource">
                             {{ placed.item.id }}
                         </slot>
                     </div>
@@ -89,10 +89,16 @@
 <script setup lang="ts" generic="R = unknown, I = unknown">
 /**
  * Шар рендеру. Уся математика — в ядрі; тут лише перетворення слотів у пікселі
- * через calc() і жодного вимірювання DOM заради розкладки (рішення 06).
+ * і зріз видимих рядків.
+ *
+ * Розміри приходять числами, а не рядками: віртуалізації треба знати висоти,
+ * щоб зіставити прокрутку з рядками. Рішення 06 від цього не страждає —
+ * геометрія бара досі не міряє DOM, віртуалізація читає лише scrollTop і
+ * висоту вікна, тобто те, що інакше дізнатись неможливо.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { buildLayout } from "../core/layout";
+import { rowOffsets, visibleSlice } from "../core/virtual";
 import type {
     DateRange,
     IsoDate,
@@ -118,16 +124,21 @@ const props = withDefaults(
         plugins?: Plugin<R, I>[];
         /** Класи на бар — єдиний спосіб пофарбувати подію за її даними. */
         itemClass?: (placed: PlacedItem<I>, resource: Resource<R>) => string | string[] | undefined;
-        /** Ширина слота й панелі ресурсів; решта оформлення — через токени --rt-*. */
-        slotWidth?: string;
-        resourceWidth?: string;
-        barHeight?: string;
+        /** Розміри в пікселях. Кольори й решта оформлення — через токени --rt-*. */
+        slotWidth?: number;
+        resourceWidth?: number;
+        barHeight?: number;
+        barGap?: number;
+        /** Скільки рядків тримати за межами вікна, щоб прокрутка не блимала. */
+        overscan?: number;
     }>(),
     {
         step: "day",
-        slotWidth: "40px",
-        resourceWidth: "253px",
-        barHeight: "28px",
+        slotWidth: 40,
+        resourceWidth: 253,
+        barHeight: 28,
+        barGap: 4,
+        overscan: 4,
     },
 );
 
@@ -170,10 +181,50 @@ watch(
 /** У DOM потрапляють лише позначені колонки — решта сітки намальована градієнтом. */
 const markedSlots = computed(() => layout.value.slots.filter((slot) => slot.isToday || slot.isWeekend));
 
+/* ── Віртуалізація рядків ─────────────────────────────────────────────── */
+
+const scrollTop = ref(0);
+const viewportHeight = ref(0);
+
+const rowHeights = computed(() =>
+    layout.value.rows.map((row) => row.laneCount * props.barHeight + (row.laneCount + 1) * props.barGap),
+);
+
+const offsets = computed(() => rowOffsets(rowHeights.value));
+const totalHeight = computed(() => offsets.value[offsets.value.length - 1] ?? 0);
+
+const slice = computed(() => visibleSlice(offsets.value, scrollTop.value, viewportHeight.value, props.overscan));
+
+interface VisibleRow {
+    row: Row<R, I>;
+    top: number;
+    height: number;
+}
+
+const visibleRows = computed<VisibleRow[]>(() =>
+    layout.value.rows.slice(slice.value.start, slice.value.end).map((row, position) => {
+        const index = slice.value.start + position;
+        return { row, top: offsets.value[index], height: rowHeights.value[index] };
+    }),
+);
+
+function onScroll() {
+    if (rootRef.value === null) return;
+    scrollTop.value = rootRef.value.scrollTop;
+}
+
+function syncViewport() {
+    if (rootRef.value === null) return;
+    viewportHeight.value = rootRef.value.clientHeight;
+}
+
+let observer: ResizeObserver | null = null;
+
+/* ── Оформлення ───────────────────────────────────────────────────────── */
+
 const rootStyle = computed(() => ({
-    "--rt-slot-width": props.slotWidth,
-    "--rt-resource-width": props.resourceWidth,
-    "--rt-bar-height": props.barHeight,
+    "--rt-slot-width": `${props.slotWidth}px`,
+    "--rt-resource-width": `${props.resourceWidth}px`,
     "--rt-slot-count": String(layout.value.slots.length),
 }));
 
@@ -182,9 +233,10 @@ function px(slots: number): string {
     return `calc(var(--rt-slot-width) * ${slots})`;
 }
 
-function rowStyle(row: Row<R, I>) {
+function rowStyle(visible: VisibleRow) {
     return {
-        height: `calc(var(--rt-bar-height) * ${row.laneCount} + var(--rt-bar-gap) * ${row.laneCount + 1})`,
+        height: `${visible.height}px`,
+        transform: `translateY(${visible.top}px)`,
     };
 }
 
@@ -192,7 +244,8 @@ function barStyle(placed: PlacedItem<I>) {
     return {
         left: px(placed.slotIndex),
         width: px(placed.slotSpan),
-        top: `calc((var(--rt-bar-height) + var(--rt-bar-gap)) * ${placed.lane} + var(--rt-bar-gap))`,
+        height: `${props.barHeight}px`,
+        top: `${(props.barHeight + props.barGap) * placed.lane + props.barGap}px`,
     };
 }
 
@@ -239,6 +292,13 @@ function subscribe(event: string, handler: ErasedHandler): () => void {
 }
 
 onMounted(() => {
+    syncViewport();
+
+    if (typeof ResizeObserver !== "undefined" && rootRef.value !== null) {
+        observer = new ResizeObserver(syncViewport);
+        observer.observe(rootRef.value);
+    }
+
     for (const plugin of props.plugins ?? []) {
         const teardown = plugin.setup({
             getLayout: () => layout.value,
@@ -253,11 +313,14 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    observer?.disconnect();
+    observer = null;
+
     for (const teardown of teardowns) teardown();
     teardowns.length = 0;
 });
 
-defineExpose({ layout });
+defineExpose({ layout, syncViewport });
 </script>
 
 <style>
@@ -266,7 +329,6 @@ defineExpose({ layout });
  * перевизначення ззовні вигравало без !important і без гонки специфічності.
  */
 :where(.rt) {
-    --rt-bar-gap: 4px;
     --rt-radius: 4px;
     --rt-surface: #ffffff;
     --rt-header-bg: #ffffff;
@@ -337,6 +399,11 @@ defineExpose({ layout });
     color: var(--rt-muted);
 }
 
+/**
+ * Обидві колонки — позиційовані контейнери однакової висоти, а рядки в них
+ * абсолютні з тим самим зміщенням. Тому панель ресурсів і сітка не можуть
+ * розсинхронізуватись: вони рендерять один і той самий зріз.
+ */
 .rt__resources {
     position: sticky;
     left: 0;
@@ -346,6 +413,9 @@ defineExpose({ layout });
 }
 
 .rt__resource {
+    position: absolute;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     box-sizing: border-box;
@@ -356,7 +426,7 @@ defineExpose({ layout });
 
 /**
  * Вертикальні лінії сітки — градієнт, а не DOM на клітинку (рішення 09):
- * 300 ресурсів на місяць коштують 300 елементів, а не 9300.
+ * 300 ресурсів на місяць коштують 300 рядків, а не 9300 клітинок.
  */
 .rt__body {
     position: relative;
@@ -386,7 +456,9 @@ defineExpose({ layout });
 }
 
 .rt__row {
-    position: relative;
+    position: absolute;
+    left: 0;
+    right: 0;
     box-sizing: border-box;
     border-bottom: 1px solid var(--rt-grid-line);
 }
@@ -403,7 +475,6 @@ defineExpose({ layout });
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    height: var(--rt-bar-height);
     padding: 0 6px;
     overflow: hidden;
     font-size: 12px;

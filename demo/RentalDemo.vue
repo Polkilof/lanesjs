@@ -27,8 +27,8 @@
             :range="range"
             :today="highlightedDay"
             :item-class="bookingClass"
-            slot-width="44px"
-            resource-width="180px"
+            :slot-width="44"
+            :resource-width="180"
             @cell-click="onCellClick"
             @item-click="onItemClick"
         >
