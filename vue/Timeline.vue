@@ -1,6 +1,8 @@
 <template>
     <div ref="rootRef" class="rt" :class="themeClass" :style="rootStyle" @scroll.passive="onScroll">
         <div class="rt__grid">
+            <div class="rt__backdrop" aria-hidden="true" />
+
             <div class="rt__corner">
                 <slot name="corner" />
             </div>
@@ -572,6 +574,28 @@ defineExpose({ layout, syncViewport, scrollToDate });
     min-width: 100%;
 }
 
+/* Розміщення явне: підкладка ділить рядок із шапкою, тож автопотік
+   розкидав би панелі по зайвих рядках. */
+.rt__corner {
+    grid-row: 1;
+    grid-column: 1;
+}
+
+.rt__axis {
+    grid-row: 1;
+    grid-column: 2;
+}
+
+.rt__resources {
+    grid-row: 2;
+    grid-column: 1;
+}
+
+.rt__body {
+    grid-row: 2;
+    grid-column: 2;
+}
+
 .rt__corner,
 .rt__axis {
     position: sticky;
@@ -600,18 +624,20 @@ defineExpose({ layout, syncViewport, scrollToDate });
 }
 
 /**
- * Підкладка під липкими панелями: закриває те, що проїжджає під ними, у
- * місцях, куди не дістає їхнє власне тло — тобто в дугах заокруглень.
- * Лежить усередині їхнього стекінг-контексту, тож перекриває вміст, який
- * скролиться, але не саму панель.
+ * Підкладка під липкою шапкою: закриває рядки, що проїжджають під нею в
+ * дугах заокруглень, куди фон самої шапки не дістає.
+ *
+ * Це сусід панелей, а не їхня дитина: усередині панелі від'ємний шар лягає
+ * поверх її власного фону й рамок, бо липка панель створює свій стекінг-
+ * контекст. Тут же порядок явний — вище за рядки, нижче за шапку.
  */
-.rt__corner::before,
-.rt__axis::before,
-.rt__resources::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
+.rt__backdrop {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    grid-row: 1;
+    grid-column: 1 / -1;
     background: var(--rt-behind-bg);
 }
 
