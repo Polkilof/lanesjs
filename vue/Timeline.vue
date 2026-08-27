@@ -551,6 +551,11 @@ defineExpose({ layout, syncViewport, scrollToDate });
     justify-content: center;
     border-right: 1px solid var(--rt-grid-line);
     padding: 6px 2px;
+}
+
+/* Останній край належить рамці контейнера, а не роздільнику дня */
+.rt__axis-cell:last-child {
+    border-right: none;
     font-size: 12px;
     line-height: 1.2;
     text-align: center;
@@ -603,7 +608,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
     box-sizing: content-box;
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
     /* Лінія на правому краї слота, а не на лівому: інакше перша збіглася б
-       із рамкою контейнера й читалася як подвійна. */
+       із рамкою контейнера й читалася як подвійна. Останню лінію теж не
+       малюємо — правий край закриває рамка, як і лівий. */
     background-image: repeating-linear-gradient(
         to right,
         transparent 0,
@@ -611,6 +617,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
         var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
         var(--rt-grid-line) var(--rt-slot-width)
     );
+    background-size: calc(100% - 1px) 100%;
+    background-repeat: no-repeat;
 }
 
 .rt__column {
