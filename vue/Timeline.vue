@@ -310,8 +310,18 @@ function measureAvailableWidth(): number {
     // jsdom і прихований контейнер не міряються — лишаємо оцінку за props
     if (body === null || body.offsetLeft === 0) return root.clientWidth - props.resourceWidth;
 
+    // offsetLeft — ціле число, а реальний початок сітки дробовий: на цілих
+    // числах рамка вилазила за край контейнера й обрізалась прокруткою
+    const offset =
+        body.getBoundingClientRect().left -
+        (root.getBoundingClientRect().left + root.clientLeft) +
+        root.scrollLeft;
+
     const borders = body.offsetWidth - body.clientWidth;
-    return root.clientWidth - body.offsetLeft - borders;
+
+    // Пів пікселя вниз: clientWidth округлений, і без запасу правий край знову
+    // може перевалити за видиму область
+    return Math.floor((root.clientWidth - offset - borders) * 2) / 2;
 }
 
 /**
@@ -602,6 +612,9 @@ defineExpose({ layout, syncViewport, scrollToDate });
     position: sticky;
     left: 0;
     z-index: 1;
+    /* Як і в сітки: задана висота — це рядки, а рамка застосунку додається
+       зовні. Інакше панелі закінчуються на різній висоті. */
+    box-sizing: content-box;
     background: var(--rt-surface);
     border-right: 1px solid var(--rt-grid-line);
 }
@@ -657,11 +670,11 @@ defineExpose({ layout, syncViewport, scrollToDate });
     border-bottom: 1px solid var(--rt-grid-line);
 }
 
-/* Нижній край списку належить рамці контейнера, як і правий */
-.rt__row--last,
-.rt__resource--last {
-    border-bottom: none;
-}
+/**
+ * Останній рядок позначений класом, але бордер лишається: чи прибирати його,
+ * вирішує застосунок — там, де в нього є власна рамка, лінія подвоїться, а
+ * там, де рамки немає (панель на самій тіні), вона і є нижнім краєм картки.
+ */
 
 .rt__background {
     position: absolute;
