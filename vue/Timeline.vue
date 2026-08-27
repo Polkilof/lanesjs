@@ -22,7 +22,7 @@
                 </div>
             </div>
 
-            <div class="rt__resources" :style="{ height: totalHeight + 'px' }">
+            <div ref="resourcesRef" class="rt__resources" :style="{ height: totalHeight + 'px' }">
                 <div
                     v-for="visible in visibleRows"
                     :key="visible.row.resource.id"
@@ -195,6 +195,7 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
+const resourcesRef = ref<HTMLElement | null>(null);
 /** Лічильник для requestUpdate() від плагінів. */
 const revision = shallowRef(0);
 
@@ -240,19 +241,37 @@ const markedSlots = computed(() =>
 
 const scrollTop = ref(0);
 const viewportHeight = ref(0);
-const availableWidth = ref(0);
+/** Виміряна ширина під панель ресурсів разом із колонками. */
+const totalWidth = ref(0);
 
 /**
  * Задана ширина слота — мінімальна. Якщо в контейнері лишається місце,
  * колонки розтягуються на нього: порожня смуга праворуч від сітки виглядає
  * як недомальований компонент, а не як свідоме рішення.
+ *
+ * Ширина завжди ціла. На дробовій кожна лінія сітки лягає між пікселями,
+ * браузер її згладжує, і сусідні лінії виходять різної товщини — саме те,
+ * чим таблична розмітка виглядає чіткішою за градієнт.
  */
 const slotWidth = computed(() => {
     const count = layout.value.slots.length;
-    if (!props.stretch || availableWidth.value <= 0 || count === 0) return props.slotWidth;
+    if (!props.stretch || totalWidth.value <= 0 || count === 0) return props.slotWidth;
 
-    return Math.max(props.slotWidth, availableWidth.value / count);
+    return Math.max(props.slotWidth, Math.floor((totalWidth.value - props.resourceWidth) / count));
 });
+
+/**
+ * Залишок від цілочисельного ділення забирає панель ресурсів: кілька зайвих
+ * пікселів у ній непомітні, а нерівні лінії в сітці помітні одразу.
+ */
+const paneWidth = computed(() => {
+    const count = layout.value.slots.length;
+    if (!props.stretch || totalWidth.value <= 0 || count === 0) return props.resourceWidth;
+
+    return Math.max(props.resourceWidth, totalWidth.value - slotWidth.value * count);
+});
+
+const availableWidth = computed(() => Math.max(0, totalWidth.value - paneWidth.value));
 
 const rowHeights = computed(() =>
     layout.value.rows.map((row) =>
@@ -294,37 +313,36 @@ function syncViewport() {
     if (rootRef.value === null) return;
 
     viewportHeight.value = rootRef.value.clientHeight;
-    availableWidth.value = measureAvailableWidth();
+    totalWidth.value = measureTotalWidth();
 }
 
 /**
- * Скільки місця лишається сітці. Рахувати як «ширина мінус панель ресурсів»
- * не можна: застосунок може додати проміжок між панелями, рамки чи власні
- * відступи, і сітка вилізе рівно на цю різницю. Тому міряємо, де тіло
- * починається насправді; `offsetLeft` не залежить від ширини слота, тож
- * зворотного зв'язку тут немає.
+ * Скільки місця дістається панелі ресурсів разом із колонками. Рахувати від
+ * props не можна: застосунок додає проміжок між панелями, рамки й відступи,
+ * і сітка вилізе рівно на цю різницю. Тому міряємо реальні краї.
+ *
+ * Зворотного зв'язку немає: ліва межа панелі й проміжок між панелями не
+ * залежать від того, якої ширини ми зробимо панель і колонки.
  */
-function measureAvailableWidth(): number {
+function measureTotalWidth(): number {
     const root = rootRef.value;
     const body = bodyRef.value;
     if (root === null) return 0;
 
     // jsdom і прихований контейнер не міряються — лишаємо оцінку за props
-    if (body === null || body.offsetLeft === 0) return root.clientWidth - props.resourceWidth;
+    if (body === null || body.offsetLeft === 0) return root.clientWidth;
 
-    // offsetLeft — ціле число, а реальний початок сітки дробовий: на цілих
-    // числах рамка вилазила за край контейнера й обрізалась прокруткою
-    const offset =
-        body.getBoundingClientRect().left -
-        (root.getBoundingClientRect().left + root.clientLeft) +
-        root.scrollLeft;
-
+    // Тільки величини компонування: прямокутник панелі ресурсів бреше, бо вона
+    // липка й при горизонтальній прокрутці їде вправо разом із вікном.
+    // Проміжок беремо з розмітки, а не відніманням власної обчисленої ширини —
+    // інакше вимірювання залежало б від свого ж результату.
+    const gap = body.offsetLeft - (resourcesRef.value?.offsetWidth ?? props.resourceWidth);
     const borders = body.offsetWidth - body.clientWidth;
 
     // Цілий піксель запасу: clientWidth округлений, і на дробових масштабах
     // (125%, 150%) рамка правого краю інакше лягає рівно на межу прокрутки
     // й зникає. Зайвий піксель фону праворуч непомітний, зникла рамка — ні.
-    return Math.floor(root.clientWidth - offset - borders) - 1;
+    return Math.floor(root.clientWidth - gap - borders) - 1;
 }
 
 /**
@@ -364,7 +382,7 @@ const themeClass = computed(() => {
 
 const rootStyle = computed(() => ({
     "--rt-slot-width": `${slotWidth.value}px`,
-    "--rt-resource-width": `${props.resourceWidth}px`,
+    "--rt-resource-width": `${paneWidth.value}px`,
     "--rt-slot-count": String(layout.value.slots.length),
 }));
 
