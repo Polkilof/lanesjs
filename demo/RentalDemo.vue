@@ -31,6 +31,11 @@
                 Редагування (pro)
             </label>
 
+            <div v-if="draggable" class="demo__nav">
+                <button type="button" :disabled="!canUndo" @click="undoRedo.undo()">↶ Скасувати</button>
+                <button type="button" :disabled="!canRedo" @click="undoRedo.redo()">↷ Повторити</button>
+            </div>
+
             <span class="demo__stat">рядків: {{ rooms.length }} · броней: {{ bookings.length }}</span>
         </header>
 
@@ -87,6 +92,7 @@ import Timeline from "../vue/Timeline.vue";
 import { useTimelineRange } from "../vue/useTimelineRange";
 import { drag } from "../pro/drag";
 import { create } from "../pro/create";
+import { history } from "../pro/history";
 import type { DragMove, DragResize } from "../pro/drag";
 import type { DragCreate } from "../pro/create";
 import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
@@ -129,6 +135,7 @@ const plugins = computed<Plugin<Room, Booking>[]>(() =>
                   canResize: (resize) => isFree({ ...resize, to: resize.resource }),
               }),
               create<Room, Booking>({ onCreate: applyCreate, canCreate: (range) => isFree({ ...range, to: range.resource }) }),
+              undoRedo,
           ]
         : [],
 );
@@ -153,34 +160,77 @@ function isFree(range: { to: Resource<Room>; start: string; end: string; item?: 
  * куди елемент переїхав, а дані лишаються тут. Тому й накладка окремим шаром
  * поверх згенерованих броней, а не правка на місці.
  */
-const moves = ref(new Map<string, { resourceId: string; start: string; end: string }>());
+interface Placement {
+    resourceId: string;
+    start: string;
+    end: string;
+}
+
+const moves = ref(new Map<string, Placement>());
+
+/**
+ * Стек дій. Лічильники дзеркалимо в refs: плагін навмисно не тягне
+ * реактивність фреймворка, тож стан кнопок оновлює застосунок.
+ */
+const canUndo = ref(false);
+const canRedo = ref(false);
+const undoRedo = history<Room, Booking>({
+    onChange: () => {
+        canUndo.value = undoRedo.canUndo();
+        canRedo.value = undoRedo.canRedo();
+    },
+});
 
 /** Створені виділенням — теж окремо від генератора, з тієї ж причини. */
 const added = ref<Item<Booking>[]>([]);
 
 function applyMove(move: DragMove<Room, Booking>) {
-    remember(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end });
+    record(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end }, "переїзд");
     lastAction.value = `переїзд ${move.item.meta?.guest}: ${move.to.title}, ${move.start} (${move.days} дн.)`;
 }
 
 function applyResize(resize: DragResize<Room, Booking>) {
     // Ресурс при розтягуванні не змінюється — беремо той, у якому бар лежить
-    remember(resize.item.id, { resourceId: resize.resource.id, start: resize.start, end: resize.end });
+    record(resize.item.id, { resourceId: resize.resource.id, start: resize.start, end: resize.end }, "край");
     lastAction.value = `край ${resize.edge}: ${resize.item.meta?.guest}, ${resize.start} → ${resize.end}`;
 }
 
+/**
+ * Правка плюс запис у стек. Що саме відкотити, знає лише застосунок — плагін
+ * даними не володіє, тож дістає від нас пару замикань.
+ */
+function record(id: string, next: Placement, label: string) {
+    const previous = moves.value.get(id);
+
+    remember(id, next);
+    undoRedo.push({
+        label,
+        undo: () => (previous === undefined ? forget(id) : remember(id, previous)),
+        redo: () => remember(id, next),
+    });
+}
+
+function forget(id: string) {
+    const updated = new Map(moves.value);
+    updated.delete(id);
+    moves.value = updated;
+}
+
 function applyCreate(created: DragCreate<Room>) {
-    const id = `new-${added.value.length + 1}`;
-    added.value = [
-        ...added.value,
-        {
-            id,
-            resourceId: created.resource.id,
-            start: created.start,
-            end: created.end,
-            meta: { guest: "Нова броня", status: "pending" },
-        },
-    ];
+    const booking: Item<Booking> = {
+        id: `new-${added.value.length + 1}`,
+        resourceId: created.resource.id,
+        start: created.start,
+        end: created.end,
+        meta: { guest: "Нова броня", status: "pending" },
+    };
+
+    added.value = [...added.value, booking];
+    undoRedo.push({
+        label: "створення",
+        undo: () => (added.value = added.value.filter((candidate) => candidate.id !== booking.id)),
+        redo: () => (added.value = [...added.value, booking]),
+    });
 
     lastAction.value = `виділено ${created.days} дн.: ${created.resource.title}, ${created.start} → ${created.end}`;
 }
