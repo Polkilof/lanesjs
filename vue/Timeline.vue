@@ -1,5 +1,5 @@
 <template>
-    <div ref="rootRef" class="rt" :style="rootStyle" @scroll.passive="onScroll">
+    <div ref="rootRef" class="rt" :class="themeClass" :style="rootStyle" @scroll.passive="onScroll">
         <div class="rt__grid">
             <div class="rt__corner">
                 <slot name="corner" />
@@ -131,6 +131,11 @@ const props = withDefaults(
         barGap?: number;
         /** Скільки рядків тримати за межами вікна, щоб прокрутка не блимала. */
         overscan?: number;
+        /**
+         * "auto" — за системною темою. Застосунки з власним перемикачем
+         * передають "light"/"dark" або просто перевизначають токени.
+         */
+        theme?: "auto" | "light" | "dark";
     }>(),
     {
         step: "day",
@@ -139,6 +144,7 @@ const props = withDefaults(
         barHeight: 28,
         barGap: 4,
         overscan: 4,
+        theme: "auto",
     },
 );
 
@@ -221,6 +227,12 @@ function syncViewport() {
 let observer: ResizeObserver | null = null;
 
 /* ── Оформлення ───────────────────────────────────────────────────────── */
+
+const themeClass = computed(() => {
+    if (props.theme === "dark") return "rt--dark";
+    if (props.theme === "light") return "rt--light";
+    return null;
+});
 
 const rootStyle = computed(() => ({
     "--rt-slot-width": `${props.slotWidth}px`,
@@ -327,6 +339,13 @@ defineExpose({ layout, syncViewport });
 /**
  * Публічні токени (рішення 02). Задані через :where(), щоб будь-яке
  * перевизначення ззовні вигравало без !important і без гонки специфічності.
+ *
+ * Три рівні, і порядок правил тут — це і є пріоритет (усі мають нульову вагу):
+ *   1. світла палітра — база;
+ *   2. системна темна — лише якщо застосунок не наполіг на світлій;
+ *   3. явний theme="dark" — перекриває навіть світлу систему.
+ * Застосунок із власним перемикачем (як [data-bs-theme] у Bootstrap) може
+ * узагалі не чіпати theme, а просто перевизначити токени у своєму блоці.
  */
 :where(.rt) {
     --rt-radius: 4px;
@@ -338,6 +357,32 @@ defineExpose({ layout, syncViewport });
     --rt-today-bg: rgba(79, 45, 197, 0.08);
     --rt-weekend-bg: rgba(107, 114, 128, 0.06);
     --rt-bar-bg: #4f2dc5;
+    --rt-bar-text: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+    :where(.rt:not(.rt--light)) {
+        --rt-surface: #161f25;
+        --rt-header-bg: #1b252c;
+        --rt-text: #e4ecef;
+        --rt-muted: #8ea0aa;
+        --rt-grid-line: rgba(255, 255, 255, 0.12);
+        --rt-today-bg: rgba(141, 112, 255, 0.16);
+        --rt-weekend-bg: rgba(255, 255, 255, 0.05);
+        --rt-bar-bg: #7c5cf0;
+        --rt-bar-text: #ffffff;
+    }
+}
+
+:where(.rt--dark) {
+    --rt-surface: #161f25;
+    --rt-header-bg: #1b252c;
+    --rt-text: #e4ecef;
+    --rt-muted: #8ea0aa;
+    --rt-grid-line: rgba(255, 255, 255, 0.12);
+    --rt-today-bg: rgba(141, 112, 255, 0.16);
+    --rt-weekend-bg: rgba(255, 255, 255, 0.05);
+    --rt-bar-bg: #7c5cf0;
     --rt-bar-text: #ffffff;
 }
 

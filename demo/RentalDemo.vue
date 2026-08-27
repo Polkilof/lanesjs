@@ -17,6 +17,15 @@
                 </select>
             </label>
 
+            <label class="demo__control">
+                Тема
+                <select v-model="theme">
+                    <option value="auto">системна</option>
+                    <option value="light">світла</option>
+                    <option value="dark">темна</option>
+                </select>
+            </label>
+
             <span class="demo__stat">рядків: {{ rooms.length }} · броней: {{ bookings.length }}</span>
         </header>
 
@@ -27,6 +36,7 @@
             :range="range"
             :today="highlightedDay"
             :item-class="bookingClass"
+            :theme="theme"
             :slot-width="44"
             :resource-width="180"
             @cell-click="onCellClick"
@@ -85,6 +95,7 @@ const STATUSES: Booking["status"][] = ["confirmed", "pending", "cleaning"];
 
 const roomCount = ref(10);
 const lastAction = ref("");
+const theme = ref<"auto" | "light" | "dark">("auto");
 
 const { range, title, prev, next, today } = useTimelineRange({ date: "2026-03-01", locale: "uk-UA" });
 const highlightedDay = "2026-03-12";
