@@ -112,7 +112,10 @@ export interface LayoutInput<R = unknown, I = unknown> {
 
 /** Події таймлайна. На них підписується і застосунок, і плагіни. */
 export interface TimelineEvents<R = unknown, I = unknown> {
-    /** Розкладку перераховано. */
+    /**
+     * Картинка змінилась: перераховано розкладку або геометрію. Сигнал для
+     * тих, хто малює в шарі накладок — час перемалювати.
+     */
     layout: (layout: Layout<R, I>) => void;
     /** Клік по порожній клітинці. */
     cellClick: (payload: { date: IsoDate; resource: Resource<R> }) => void;
@@ -137,6 +140,12 @@ export interface Geometry {
     slotWidth: number;
     /** Верх кожного рядка від початку тіла; довжина на одиницю більша. */
     rowOffsets: number[];
+    /**
+     * Висота бара й проміжок між доріжками. Без них не порахувати, де бар
+     * лежить усередині рядка, а це потрібно всім, хто малює по барах.
+     */
+    barHeight: number;
+    barGap: number;
 }
 
 /** Що лежить під точкою. Порожні місця теж влучання — там створюють події. */

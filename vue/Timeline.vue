@@ -152,6 +152,7 @@ import type {
     Row,
     Slot,
     SlotStep,
+    TimelineEvents,
 } from "../core/types";
 
 const props = withDefaults(
@@ -255,6 +256,12 @@ const scrollbarRef = ref<HTMLElement | null>(null);
 /** Лічильник для requestUpdate() від плагінів. */
 const revision = shallowRef(0);
 
+/**
+ * Підписки плагінів. Оголошені тут, а не поруч із рештою плагінного коду:
+ * перший спостерігач має immediate, тобто розсилає ще під час setup.
+ */
+const handlers = new Map<string, Set<(payload: never) => void>>();
+
 const layout = computed<Layout<R, I>>(() => {
     void revision.value;
     return buildLayout<R, I>({
@@ -275,9 +282,13 @@ const layout = computed<Layout<R, I>>(() => {
  */
 watch(
     () => `${layout.value.range.start}|${layout.value.range.end}`,
-    () => emit("range-change", layout.value.range),
+    () => {
+        emit("range-change", layout.value.range);
+        notify("rangeChange", layout.value.range);
+    },
     { immediate: true },
 );
+
 
 /**
  * У DOM потрапляють лише позначені колонки — решта сітки намальована
@@ -402,6 +413,13 @@ const offsets = computed(() => rowOffsets(rowHeights.value));
 const totalHeight = computed(() => offsets.value[offsets.value.length - 1] ?? 0);
 
 const slice = computed(() => visibleSlice(offsets.value, scrollTop.value, viewportHeight.value, props.overscan));
+
+/**
+ * Сигнал тим, хто малює в шарі накладок. Стежимо і за розкладкою, і за
+ * геометрією: після зміни ширини дня картинка інша, хоч розкладка та сама.
+ * flush: "post" — щоб плагін малював уже по оновленому DOM.
+ */
+watch([layout, slotWidth, offsets], () => notify("layout", layout.value), { flush: "post" });
 
 interface VisibleRow {
     row: Row<R, I>;
@@ -638,10 +656,12 @@ function barStyle(placed: PlacedItem<I>) {
 
 function onSlotLabelClick(event: MouseEvent, slot: Slot) {
     emit("slot-click", { slot, event, target: event.currentTarget as HTMLElement });
+    notify("slotClick", { slot });
 }
 
 function onBarClick(event: MouseEvent, item: Item<I>, resource: Resource<R>) {
     emit("item-click", { item, resource, event, target: event.currentTarget as HTMLElement });
+    notify("itemClick", { item, resource });
 }
 
 /**
@@ -680,6 +700,7 @@ function onBodyClick(event: MouseEvent) {
     if (hit === null) return;
 
     emit("cell-click", { date: hit.date, resource: hit.resource, event, target: rowEl });
+    notify("cellClick", { date: hit.date, resource: hit.resource });
 }
 
 /* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
@@ -690,8 +711,19 @@ function onBodyClick(event: MouseEvent) {
  */
 type ErasedHandler = (payload: never) => void;
 
-const handlers = new Map<string, Set<ErasedHandler>>();
 const teardowns: Array<() => void> = [];
+
+/**
+ * Розіслати подію плагінам. Джерело те саме, що й у Vue-подій: розійтися вони
+ * не можуть, бо викликаються поруч. Раніше підписки збиралися й не надходили
+ * нікуди — ніхто не помітив, бо жести слухають DOM, а історія клавіатуру.
+ */
+function notify<K extends keyof TimelineEvents<R, I>>(event: K, payload: Parameters<TimelineEvents<R, I>[K]>[0]) {
+    const bucket = handlers.get(event);
+    if (bucket === undefined) return;
+
+    for (const handler of bucket) (handler as (value: unknown) => void)(payload);
+}
 
 function subscribe(event: string, handler: ErasedHandler): () => void {
     const bucket = handlers.get(event) ?? new Set<ErasedHandler>();
@@ -731,7 +763,12 @@ onMounted(() => {
             getLayout: () => layout.value,
             getRoot: () => rootRef.value,
             getOverlay: () => overlayRef.value,
-            getGeometry: (): Geometry => ({ slotWidth: slotWidth.value, rowOffsets: offsets.value }),
+            getGeometry: (): Geometry => ({
+                slotWidth: slotWidth.value,
+                rowOffsets: offsets.value,
+                barHeight: props.barHeight,
+                barGap: props.barGap,
+            }),
             hitTest,
             on: (event, handler) => subscribe(event, handler as ErasedHandler),
             requestUpdate: () => {
@@ -740,6 +777,10 @@ onMounted(() => {
         });
         if (typeof teardown === "function") teardowns.push(teardown);
     }
+
+    // Перший сигнал після підписок: інакше плагін, який малює, чекав би на
+    // першу зміну даних, щоб намалювати те, що вже й так на екрані.
+    if (props.plugins !== undefined && props.plugins.length > 0) notify("layout", layout.value);
 });
 
 onBeforeUnmount(() => {

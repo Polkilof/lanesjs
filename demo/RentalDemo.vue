@@ -31,6 +31,11 @@
                 Редагування (pro)
             </label>
 
+            <label class="demo__control">
+                <input v-model="linked" type="checkbox" />
+                Зв'язки (pro)
+            </label>
+
             <div v-if="draggable" class="demo__nav">
                 <button type="button" :disabled="!canUndo" @click="undoRedo.undo()">↶ Скасувати</button>
                 <button type="button" :disabled="!canRedo" @click="undoRedo.redo()">↷ Повторити</button>
@@ -40,14 +45,14 @@
         </header>
 
         <Timeline
-            :key="draggable ? 'draggable' : 'plain'"
+            :key="`${draggable}-${linked}`"
             class="demo__timeline"
             :resources="rooms"
             :items="bookings"
             :range="range"
             :today="highlightedDay"
             :item-class="bookingClass"
-            :plugins="plugins"
+            :plugins="allPlugins"
             :theme="theme"
             :slot-width="44"
             :resource-width="180"
@@ -93,6 +98,8 @@ import { useTimelineRange } from "../vue/useTimelineRange";
 import { drag } from "../pro/drag";
 import { create } from "../pro/create";
 import { history } from "../pro/history";
+import { links } from "../pro/links";
+import type { Link } from "../pro/links";
 import type { DragMove, DragResize } from "../pro/drag";
 import type { DragCreate } from "../pro/create";
 import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
@@ -139,6 +146,32 @@ const plugins = computed<Plugin<Room, Booking>[]>(() =>
           ]
         : [],
 );
+
+/**
+ * Другий платний плагін у тому ж списку — щоб було видно, що вони не заважають
+ * один одному: жести слухають вказівник, зв'язки малюють на подію розкладки.
+ */
+const linked = ref(false);
+const allPlugins = computed<Plugin<Room, Booking>[]>(() =>
+    linked.value ? [...plugins.value, links<Room, Booking>({ links: () => chains.value })] : plugins.value,
+);
+
+/** Ланцюжок заїздів у кожній кімнаті: після виїзду — наступний гість. */
+const chains = computed<Link[]>(() => {
+    const byRoom = new Map<string, Item<Booking>[]>();
+    for (const booking of bookings.value) {
+        byRoom.set(booking.resourceId, [...(byRoom.get(booking.resourceId) ?? []), booking]);
+    }
+
+    const result: Link[] = [];
+    for (const list of byRoom.values()) {
+        const ordered = [...list].sort((left, right) => left.start.localeCompare(right.start));
+        for (let index = 1; index < ordered.length; index++) {
+            result.push({ from: ordered[index - 1].id, to: ordered[index].id });
+        }
+    }
+    return result;
+});
 
 /**
  * Правила готелю: броні не перетинаються, а між поверхами гість не переїжджає.
