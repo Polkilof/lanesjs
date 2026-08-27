@@ -56,7 +56,10 @@
                         :key="placed.item.id"
                         class="rt__background"
                         :class="props.itemClass?.(placed, visible.row.resource)"
-                        :style="{ left: px(placed.slotIndex), width: px(placed.slotSpan) }"
+                        :style="[
+                            { left: px(placed.slotIndex), width: px(placed.slotSpan) },
+                            props.itemStyle?.(placed, visible.row.resource),
+                        ]"
                         aria-hidden="true"
                     >
                         <slot name="background" :placed="placed" />
@@ -73,7 +76,7 @@
                             },
                             props.itemClass?.(placed, visible.row.resource),
                         ]"
-                        :style="barStyle(placed)"
+                        :style="[barStyle(placed), props.itemStyle?.(placed, visible.row.resource)]"
                         @click.stop="emit('item-click', { item: placed.item, resource: visible.row.resource })"
                     >
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
@@ -122,8 +125,13 @@ const props = withDefaults(
         weekendDays?: number[];
         weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         plugins?: Plugin<R, I>[];
-        /** Класи на бар — єдиний спосіб пофарбувати подію за її даними. */
+        /** Класи на бар — для станів, відомих наперед. */
         itemClass?: (placed: PlacedItem<I>, resource: Resource<R>) => string | string[] | undefined;
+        /**
+         * Стилі на бар — для довільних значень із даних: коли колір приходить
+         * з API, класом його не передаси. Тут же перевизначаються --rt-bar-*.
+         */
+        itemStyle?: (placed: PlacedItem<I>, resource: Resource<R>) => Record<string, string> | undefined;
         /** Розміри в пікселях. Кольори й решта оформлення — через токени --rt-*. */
         slotWidth?: number;
         resourceWidth?: number;
