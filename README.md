@@ -76,6 +76,20 @@ grep -rni 'employee\|absence\|holiday\|hrm' --include='*.ts' --include='*.vue' s
 токен без `!important`. HRM піде саме цим шляхом: змапить `--rt-*` на `--tb-*`
 у своєму блоці `[data-bs-theme]` і `theme` не передаватиме взагалі.
 
+## Публічні частини розмітки
+
+Токенів вистачає на кольори, але не на компонування: рамки панелей, проміжок
+між ними, висоту шапки застосунок міняє тільки через селектори. Тому ці класи —
+частина контракту нарівні з props, і перейменування будь-якого з них ламає
+споживачів:
+
+`.rt` · `.rt__grid` · `.rt__corner` · `.rt__axis` · `.rt__axis-cell` ·
+`.rt__resources` · `.rt__resource` · `.rt__body` · `.rt__column` · `.rt__row` ·
+`.rt__bar` · `.rt__background`
+
+Модифікатори `--today`, `--weekend`, `--clipped-start`, `--clipped-end` — теж.
+Усе, що не в цьому списку, вважати внутрішнім.
+
 ## Тести
 
 `tests/unit/lanes/**` — на `core/`. У `vitest.config.ts` до `coverage.include`

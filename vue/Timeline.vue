@@ -105,7 +105,7 @@
  * геометрія бара досі не міряє DOM, віртуалізація читає лише scrollTop і
  * висоту вікна, тобто те, що інакше дізнатись неможливо.
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { buildLayout } from "../core/layout";
 import { rowOffsets, visibleSlice } from "../core/virtual";
 import type {
@@ -144,10 +144,17 @@ const props = withDefaults(
          */
         slotClass?: (slot: Slot) => string | string[] | undefined;
         /** Розміри в пікселях. Кольори й решта оформлення — через токени --rt-*. */
+        /** Мінімальна ширина слота: якщо місця більше — колонки розтягуються. */
         slotWidth?: number;
         resourceWidth?: number;
         barHeight?: number;
         barGap?: number;
+        /** Нижня межа висоти рядка, незалежно від кількості доріжок. */
+        minRowHeight?: number;
+        /** Вимкнути розтягування, якщо потрібна рівно задана ширина дня. */
+        stretch?: boolean;
+        /** Прокрутити вісь до цієї дати: на монтуванні й на кожній зміні. */
+        scrollTo?: IsoDate;
         /** Скільки рядків тримати за межами вікна, щоб прокрутка не блимала. */
         overscan?: number;
         /**
@@ -162,6 +169,8 @@ const props = withDefaults(
         resourceWidth: 253,
         barHeight: 28,
         barGap: 4,
+        minRowHeight: 0,
+        stretch: true,
         overscan: 4,
         theme: "auto",
     },
@@ -226,9 +235,24 @@ const markedSlots = computed(() =>
 
 const scrollTop = ref(0);
 const viewportHeight = ref(0);
+const viewportWidth = ref(0);
+
+/**
+ * Задана ширина слота — мінімальна. Якщо в контейнері лишається місце,
+ * колонки розтягуються на нього: порожня смуга праворуч від сітки виглядає
+ * як недомальований компонент, а не як свідоме рішення.
+ */
+const slotWidth = computed(() => {
+    const count = layout.value.slots.length;
+    if (!props.stretch || viewportWidth.value === 0 || count === 0) return props.slotWidth;
+
+    return Math.max(props.slotWidth, (viewportWidth.value - props.resourceWidth) / count);
+});
 
 const rowHeights = computed(() =>
-    layout.value.rows.map((row) => row.laneCount * props.barHeight + (row.laneCount + 1) * props.barGap),
+    layout.value.rows.map((row) =>
+        Math.max(props.minRowHeight, row.laneCount * props.barHeight + (row.laneCount + 1) * props.barGap),
+    ),
 );
 
 const offsets = computed(() => rowOffsets(rowHeights.value));
@@ -257,7 +281,34 @@ function onScroll() {
 function syncViewport() {
     if (rootRef.value === null) return;
     viewportHeight.value = rootRef.value.clientHeight;
+    viewportWidth.value = rootRef.value.clientWidth;
 }
+
+/**
+ * Прокрутити вісь до дати. За замовчуванням дата опиняється по центру видимої
+ * частини — саме те, що потрібно для «показати сьогодні».
+ */
+function scrollToDate(date: IsoDate, align: "start" | "center" = "center") {
+    if (rootRef.value === null) return;
+
+    const index = layout.value.slots.findIndex((slot) => slot.start <= date && date < slot.end);
+    if (index < 0) return;
+
+    const position = index * slotWidth.value;
+    const visible = viewportWidth.value - props.resourceWidth;
+    const left = align === "center" ? position - visible / 2 + slotWidth.value / 2 : position;
+
+    rootRef.value.scrollLeft = Math.max(0, left);
+}
+
+watch(
+    () => [props.scrollTo, layout.value.range.start] as const,
+    async ([date]) => {
+        if (date === undefined) return;
+        await nextTick();
+        scrollToDate(date);
+    },
+);
 
 let observer: ResizeObserver | null = null;
 
@@ -270,7 +321,7 @@ const themeClass = computed(() => {
 });
 
 const rootStyle = computed(() => ({
-    "--rt-slot-width": `${props.slotWidth}px`,
+    "--rt-slot-width": `${slotWidth.value}px`,
     "--rt-resource-width": `${props.resourceWidth}px`,
     "--rt-slot-count": String(layout.value.slots.length),
 }));
@@ -349,6 +400,10 @@ function subscribe(event: string, handler: ErasedHandler): () => void {
 onMounted(() => {
     syncViewport();
 
+    if (props.scrollTo !== undefined) {
+        nextTick(() => scrollToDate(props.scrollTo as IsoDate));
+    }
+
     if (typeof ResizeObserver !== "undefined" && rootRef.value !== null) {
         observer = new ResizeObserver(syncViewport);
         observer.observe(rootRef.value);
@@ -375,7 +430,7 @@ onBeforeUnmount(() => {
     teardowns.length = 0;
 });
 
-defineExpose({ layout, syncViewport });
+defineExpose({ layout, syncViewport, scrollToDate });
 </script>
 
 <style>
