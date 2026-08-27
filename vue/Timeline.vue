@@ -319,9 +319,10 @@ function measureAvailableWidth(): number {
 
     const borders = body.offsetWidth - body.clientWidth;
 
-    // Пів пікселя вниз: clientWidth округлений, і без запасу правий край знову
-    // може перевалити за видиму область
-    return Math.floor((root.clientWidth - offset - borders) * 2) / 2;
+    // Цілий піксель запасу: clientWidth округлений, і на дробових масштабах
+    // (125%, 150%) рамка правого краю інакше лягає рівно на межу прокрутки
+    // й зникає. Зайвий піксель фону праворуч непомітний, зникла рамка — ні.
+    return Math.floor(root.clientWidth - offset - borders) - 1;
 }
 
 /**
