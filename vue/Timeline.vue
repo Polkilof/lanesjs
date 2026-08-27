@@ -1,30 +1,41 @@
 <template>
-    <div ref="rootRef" class="rt" :class="themeClass" :style="rootStyle" @scroll.passive="onScroll">
-        <div class="rt__grid">
-            <div class="rt__backdrop" aria-hidden="true" />
-
+    <div ref="rootRef" class="rt" :class="[themeClass, modeClass]" :style="rootStyle">
+        <!--
+            Шапка — окрема смуга над скролером, а не рядок усередині нього.
+            Тоді під нею нічого не проїжджає, а в режимі сторінки вона може
+            липнути до вікна: усередині скролера це неможливо, бо будь-який
+            overflow створює власний контекст прокрутки й перехоплює sticky.
+        -->
+        <div class="rt__header" :style="headerStyle">
             <div class="rt__corner">
                 <slot name="corner" />
             </div>
 
-            <div class="rt__axis">
-                <div
-                    v-for="slot in layout.slots"
-                    :key="slot.start"
-                    class="rt__axis-cell"
-                    :class="[
-                        { 'rt__axis-cell--today': slot.isToday, 'rt__axis-cell--weekend': slot.isWeekend },
-                        props.slotClass?.(slot),
-                    ]"
-                    @click="onSlotLabelClick($event, slot)"
-                >
-                    <slot name="slot-label" :slot-data="slot">
-                        {{ slot.date.getDate() }}
-                    </slot>
+            <!-- Вікно, у якому вісь дат їде разом із сіткою; кут лишається на місці -->
+            <div class="rt__axis-viewport">
+                <div ref="headerTrackRef" class="rt__axis">
+                    <div
+                        v-for="slot in layout.slots"
+                        :key="slot.start"
+                        class="rt__axis-cell"
+                        :class="[
+                            { 'rt__axis-cell--today': slot.isToday, 'rt__axis-cell--weekend': slot.isWeekend },
+                            props.slotClass?.(slot),
+                        ]"
+                        @click="onSlotLabelClick($event, slot)"
+                    >
+                        <slot name="slot-label" :slot-data="slot">
+                            {{ slot.date.getDate() }}
+                        </slot>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div ref="resourcesRef" class="rt__resources" :style="{ height: totalHeight + 'px' }">
+
+        <div ref="scrollerRef" class="rt__scroller" @scroll.passive="onScroll">
+            <div class="rt__grid">
+                <div ref="resourcesRef" class="rt__resources" :style="{ height: totalHeight + 'px' }">
                 <div
                     v-for="visible in visibleRows"
                     :key="visible.row.resource.id"
@@ -92,9 +103,19 @@
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
                             {{ placed.item.id }}
                         </slot>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!--
+            Смуга прокрутки, прилипла до низу вікна: у режимі сторінки справжня
+            лежить у кінці таблиці, куди ще треба доскролити. Це порожній
+            скролер тієї ж ширини, синхронізований із сіткою в обидва боки.
+        -->
+        <div v-if="pageScroll" ref="scrollbarRef" class="rt__scrollbar" @scroll.passive="onScrollbarScroll">
+            <div class="rt__scrollbar-track" :style="{ width: contentWidth + 'px' }" />
         </div>
     </div>
 </template>
@@ -161,6 +182,14 @@ const props = withDefaults(
         stretch?: boolean;
         /** Прокрутити вісь до цієї дати: на монтуванні й на кожній зміні. */
         scrollTo?: IsoDate;
+        /**
+         * "container" — таблиця скролиться всередині заданої висоти.
+         * "page" — росте на всю висоту, вертикально скролиться сторінка, а
+         * шапка й смуга прокрутки липнуть до вікна.
+         */
+        scroll?: "container" | "page";
+        /** Висота власної липкої шапки застосунку; лише для scroll: "page". */
+        stickyOffset?: number;
         /** Скільки рядків тримати за межами вікна, щоб прокрутка не блимала. */
         overscan?: number;
         /**
@@ -179,8 +208,14 @@ const props = withDefaults(
         stretch: true,
         overscan: 4,
         theme: "auto",
+        scroll: "container",
+        stickyOffset: 0,
     },
 );
+
+const pageScroll = computed(() => props.scroll === "page");
+const modeClass = computed(() => (pageScroll.value ? "rt--page-scroll" : "rt--container-scroll"));
+const headerStyle = computed(() => (pageScroll.value ? { top: `${props.stickyOffset}px` } : undefined));
 
 /**
  * У payload іде і подія, і `target` — елемент, до якого можна прив'язати попап
@@ -198,6 +233,9 @@ const emit = defineEmits<{
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
 const resourcesRef = ref<HTMLElement | null>(null);
+const scrollerRef = ref<HTMLElement | null>(null);
+const headerTrackRef = ref<HTMLElement | null>(null);
+const scrollbarRef = ref<HTMLElement | null>(null);
 /** Лічильник для requestUpdate() від плагінів. */
 const revision = shallowRef(0);
 
@@ -306,16 +344,65 @@ const visibleRows = computed<VisibleRow[]>(() =>
     }),
 );
 
+/**
+ * Горизонтальна прокрутка одна на всіх: шапку зсуваємо трансформацією, а не
+ * власним скролером. Два справжні скролери довелося б синхронізувати, і саме
+ * на цьому місці FullCalendar тримає найбільше коду.
+ */
 function onScroll() {
-    if (rootRef.value === null) return;
-    scrollTop.value = rootRef.value.scrollTop;
+    const scroller = scrollerRef.value;
+    if (scroller === null) return;
+
+    if (!pageScroll.value) scrollTop.value = scroller.scrollTop;
+
+    const offset = scroller.scrollLeft;
+    if (headerTrackRef.value !== null) {
+        headerTrackRef.value.style.transform = `translateX(${-offset}px)`;
+    }
+    if (scrollbarRef.value !== null && scrollbarRef.value.scrollLeft !== offset) {
+        scrollbarRef.value.scrollLeft = offset;
+    }
 }
 
-function syncViewport() {
-    if (rootRef.value === null) return;
+/** Прилипла смуга веде сітку; захист від відлуння — звірка поточного значення. */
+function onScrollbarScroll() {
+    const scroller = scrollerRef.value;
+    const scrollbar = scrollbarRef.value;
+    if (scroller === null || scrollbar === null) return;
+    if (scroller.scrollLeft === scrollbar.scrollLeft) return;
 
-    viewportHeight.value = rootRef.value.clientHeight;
+    scroller.scrollLeft = scrollbar.scrollLeft;
+}
+
+/**
+ * У режимі сторінки вікном прокрутки є саме вікно: рахуємо, наскільки тіло
+ * сітки виїхало вгору за липку шапку застосунку.
+ */
+function syncPageViewport() {
+    const body = bodyRef.value;
+    if (body === null || !pageScroll.value) return;
+
+    const top = body.getBoundingClientRect().top;
+    const visibleTop = props.stickyOffset + headerHeight.value;
+
+    scrollTop.value = Math.max(0, visibleTop - top);
+    viewportHeight.value = Math.max(0, window.innerHeight - visibleTop);
+}
+
+const headerHeight = ref(0);
+/** Ширина вмісту сітки — під неї підганяється прилипла смуга прокрутки. */
+const contentWidth = ref(0);
+
+function syncViewport() {
+    const scroller = scrollerRef.value;
+    if (scroller === null) return;
+
+    headerHeight.value = headerTrackRef.value?.offsetHeight ?? 0;
+    contentWidth.value = scroller.scrollWidth;
     totalWidth.value = measureTotalWidth();
+
+    if (pageScroll.value) syncPageViewport();
+    else viewportHeight.value = scroller.clientHeight;
 }
 
 /**
@@ -327,7 +414,7 @@ function syncViewport() {
  * залежать від того, якої ширини ми зробимо панель і колонки.
  */
 function measureTotalWidth(): number {
-    const root = rootRef.value;
+    const root = scrollerRef.value;
     const body = bodyRef.value;
     if (root === null) return 0;
 
@@ -352,7 +439,7 @@ function measureTotalWidth(): number {
  * частини — саме те, що потрібно для «показати сьогодні».
  */
 function scrollToDate(date: IsoDate, align: "start" | "center" = "center") {
-    if (rootRef.value === null) return;
+    if (scrollerRef.value === null) return;
 
     const index = layout.value.slots.findIndex((slot) => slot.start <= date && date < slot.end);
     if (index < 0) return;
@@ -360,7 +447,8 @@ function scrollToDate(date: IsoDate, align: "start" | "center" = "center") {
     const position = index * slotWidth.value;
     const left = align === "center" ? position - availableWidth.value / 2 + slotWidth.value / 2 : position;
 
-    rootRef.value.scrollLeft = Math.max(0, left);
+    scrollerRef.value.scrollLeft = Math.max(0, left);
+    onScroll();
 }
 
 watch(
@@ -462,13 +550,18 @@ function subscribe(event: string, handler: ErasedHandler): () => void {
 onMounted(() => {
     syncViewport();
 
+    if (pageScroll.value) {
+        window.addEventListener("scroll", syncPageViewport, { passive: true });
+        window.addEventListener("resize", syncViewport, { passive: true });
+    }
+
     if (props.scrollTo !== undefined) {
         nextTick(() => scrollToDate(props.scrollTo as IsoDate));
     }
 
-    if (typeof ResizeObserver !== "undefined" && rootRef.value !== null) {
+    if (typeof ResizeObserver !== "undefined" && scrollerRef.value !== null) {
         observer = new ResizeObserver(syncViewport);
-        observer.observe(rootRef.value);
+        observer.observe(scrollerRef.value);
     }
 
     for (const plugin of props.plugins ?? []) {
@@ -485,6 +578,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    window.removeEventListener("scroll", syncPageViewport);
+    window.removeEventListener("resize", syncViewport);
+
     observer?.disconnect();
     observer = null;
 
@@ -518,9 +614,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
         var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
         var(--rt-grid-line) var(--rt-slot-width)
     );
-    /* Тло під липкими панелями. Потрібне, лише якщо застосунок заокруглює їх:
-       у прозорі дуги кутів інакше видно рядки, що проїжджають під ними. */
-    --rt-behind-bg: transparent;
+    /* Проміжок між панеллю ресурсів і сіткою; шапка й тіло беруть його разом. */
+    --rt-pane-gap: 0px;
     --rt-radius: 4px;
     --rt-surface: #ffffff;
     --rt-header-bg: #ffffff;
@@ -561,48 +656,86 @@ defineExpose({ layout, syncViewport, scrollToDate });
 
 .rt {
     position: relative;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
     background: var(--rt-surface);
     color: var(--rt-text);
+}
+
+/* Висоту задає споживач; прокрутка живе всередині */
+.rt--container-scroll {
+    overflow: hidden;
+}
+
+/**
+ * Шапка стоїть над скролером, а не в ньому. Це єдиний спосіб дати їй липнути
+ * до вікна: будь-який overflow створює власний контекст прокрутки, і sticky
+ * усередині нього чіпляється за контейнер, а не за сторінку.
+ *
+ * Горизонтально вісь дат веде трансформація, а не другий скролер: два
+ * справжні скролери довелося б синхронізувати подіями, і саме там подібні
+ * компоненти набирають найбільше коду й найбільше смикань.
+ */
+.rt__header {
+    position: relative;
+    z-index: 2;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: var(--rt-resource-width) minmax(0, 1fr);
+    column-gap: var(--rt-pane-gap);
+}
+
+.rt--page-scroll .rt__header {
+    position: sticky;
+}
+
+.rt__axis-viewport {
+    overflow: hidden;
+}
+
+.rt__scroller {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
+}
+
+.rt--container-scroll .rt__scroller {
+    overflow-y: auto;
+}
+
+/**
+ * Смуга прокрутки, прилипла до низу вікна: у режимі сторінки справжня лежить
+ * у кінці таблиці, тобто поза екраном, поки не догорнеш до самого низу.
+ */
+.rt__scrollbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.rt__scrollbar-track {
+    height: 1px;
 }
 
 .rt__grid {
     display: grid;
     grid-template-columns: var(--rt-resource-width) max-content;
-    grid-template-rows: auto auto;
+    column-gap: var(--rt-pane-gap);
     width: max-content;
     min-width: 100%;
 }
 
-/* Розміщення явне: підкладка ділить рядок із шапкою, тож автопотік
-   розкидав би панелі по зайвих рядках. */
-.rt__corner {
-    grid-row: 1;
-    grid-column: 1;
-}
-
-.rt__axis {
-    grid-row: 1;
-    grid-column: 2;
-}
-
-.rt__resources {
-    grid-row: 2;
-    grid-column: 1;
-}
-
-.rt__body {
-    grid-row: 2;
-    grid-column: 2;
-}
-
 .rt__corner,
 .rt__axis {
-    position: sticky;
-    top: 0;
-    z-index: 2;
     background-color: var(--rt-header-bg);
     border-bottom: 1px solid var(--rt-grid-line);
+}
+
+.rt__corner {
+    border-right: 1px solid var(--rt-grid-line);
 }
 
 /**
@@ -612,39 +745,14 @@ defineExpose({ layout, syncViewport, scrollToDate });
  * Спільний градієнт розійтися не може за побудовою.
  */
 .rt__axis {
-    background-image: var(--rt-grid-lines);
-    background-size: calc(100% - 2px) 100%;
-    background-repeat: no-repeat;
-}
-
-.rt__corner {
-    left: 0;
-    z-index: 3;
-    border-right: 1px solid var(--rt-grid-line);
-}
-
-/**
- * Підкладка під липкою шапкою: закриває рядки, що проїжджають під нею в
- * дугах заокруглень, куди фон самої шапки не дістає.
- *
- * Це сусід панелей, а не їхня дитина: усередині панелі від'ємний шар лягає
- * поверх її власного фону й рамок, бо липка панель створює свій стекінг-
- * контекст. Тут же порядок явний — вище за рядки, нижче за шапку.
- */
-.rt__backdrop {
-    position: sticky;
-    top: 0;
-    left: 0;
-    z-index: 1;
-    grid-row: 1;
-    grid-column: 1 / -1;
-    background: var(--rt-behind-bg);
-}
-
-.rt__axis {
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: var(--rt-slot-width);
+    width: max-content;
+    background-image: var(--rt-grid-lines);
+    background-size: calc(100% - 2px) 100%;
+    background-repeat: no-repeat;
+    will-change: transform;
 }
 
 .rt__axis-cell {
