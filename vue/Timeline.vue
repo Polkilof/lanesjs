@@ -145,8 +145,10 @@ const props = withDefaults(
          * отримує накладку на всю висоту нарівні з «сьогодні» й вихідними.
          */
         slotClass?: (slot: Slot) => string | string[] | undefined;
-        /** Розміри в пікселях. Кольори й решта оформлення — через токени --rt-*. */
-        /** Мінімальна ширина слота: якщо місця більше — колонки розтягуються. */
+        /**
+         * Розміри в пікселях; кольори й решта оформлення — через токени --rt-*.
+         * Ширина слота мінімальна: якщо місця більше, колонки розтягуються.
+         */
         slotWidth?: number;
         resourceWidth?: number;
         barHeight?: number;
@@ -566,7 +568,7 @@ defineExpose({ layout, syncViewport, scrollToDate });
  */
 .rt__axis {
     background-image: var(--rt-grid-lines);
-    background-size: calc(100% - 1px) 100%;
+    background-size: calc(100% - 2px) 100%;
     background-repeat: no-repeat;
 }
 
@@ -644,7 +646,7 @@ defineExpose({ layout, syncViewport, scrollToDate });
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
     /* Останню лінію не малюємо — правий край закриває рамка, як і лівий. */
     background-image: var(--rt-grid-lines);
-    background-size: calc(100% - 1px) 100%;
+    background-size: calc(100% - 2px) 100%;
     background-repeat: no-repeat;
 }
 
