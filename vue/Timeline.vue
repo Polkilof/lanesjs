@@ -35,7 +35,7 @@
                 </div>
             </div>
 
-            <div class="rt__body" :style="{ height: totalHeight + 'px' }" @click="onBodyClick">
+            <div ref="bodyRef" class="rt__body" :style="{ height: totalHeight + 'px' }" @click="onBodyClick">
                 <!-- Накладки на всю висоту: по одному елементу на позначену колонку,
                      а не на кожну клітинку (рішення 09). -->
                 <div
@@ -190,6 +190,7 @@ const emit = defineEmits<{
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
+const bodyRef = ref<HTMLElement | null>(null);
 /** Лічильник для requestUpdate() від плагінів. */
 const revision = shallowRef(0);
 
@@ -235,7 +236,7 @@ const markedSlots = computed(() =>
 
 const scrollTop = ref(0);
 const viewportHeight = ref(0);
-const viewportWidth = ref(0);
+const availableWidth = ref(0);
 
 /**
  * Задана ширина слота — мінімальна. Якщо в контейнері лишається місце,
@@ -244,9 +245,9 @@ const viewportWidth = ref(0);
  */
 const slotWidth = computed(() => {
     const count = layout.value.slots.length;
-    if (!props.stretch || viewportWidth.value === 0 || count === 0) return props.slotWidth;
+    if (!props.stretch || availableWidth.value <= 0 || count === 0) return props.slotWidth;
 
-    return Math.max(props.slotWidth, (viewportWidth.value - props.resourceWidth) / count);
+    return Math.max(props.slotWidth, availableWidth.value / count);
 });
 
 const rowHeights = computed(() =>
@@ -280,8 +281,28 @@ function onScroll() {
 
 function syncViewport() {
     if (rootRef.value === null) return;
+
     viewportHeight.value = rootRef.value.clientHeight;
-    viewportWidth.value = rootRef.value.clientWidth;
+    availableWidth.value = measureAvailableWidth();
+}
+
+/**
+ * Скільки місця лишається сітці. Рахувати як «ширина мінус панель ресурсів»
+ * не можна: застосунок може додати проміжок між панелями, рамки чи власні
+ * відступи, і сітка вилізе рівно на цю різницю. Тому міряємо, де тіло
+ * починається насправді; `offsetLeft` не залежить від ширини слота, тож
+ * зворотного зв'язку тут немає.
+ */
+function measureAvailableWidth(): number {
+    const root = rootRef.value;
+    const body = bodyRef.value;
+    if (root === null) return 0;
+
+    // jsdom і прихований контейнер не міряються — лишаємо оцінку за props
+    if (body === null || body.offsetLeft === 0) return root.clientWidth - props.resourceWidth;
+
+    const borders = body.offsetWidth - body.clientWidth;
+    return root.clientWidth - body.offsetLeft - borders;
 }
 
 /**
@@ -295,8 +316,7 @@ function scrollToDate(date: IsoDate, align: "start" | "center" = "center") {
     if (index < 0) return;
 
     const position = index * slotWidth.value;
-    const visible = viewportWidth.value - props.resourceWidth;
-    const left = align === "center" ? position - visible / 2 + slotWidth.value / 2 : position;
+    const left = align === "center" ? position - availableWidth.value / 2 + slotWidth.value / 2 : position;
 
     rootRef.value.scrollLeft = Math.max(0, left);
 }
@@ -573,6 +593,9 @@ defineExpose({ layout, syncViewport, scrollToDate });
  */
 .rt__body {
     position: relative;
+    /* Ширина — це рівно колонки: рамка застосунку має додаватись зовні,
+       інакше сітка стане вужчою за шапку на товщину рамок. */
+    box-sizing: content-box;
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
     /* Лінія на правому краї слота, а не на лівому: інакше перша збіглася б
        із рамкою контейнера й читалася як подвійна. */
