@@ -540,11 +540,16 @@ defineExpose({ layout, syncViewport, scrollToDate });
     grid-auto-columns: var(--rt-slot-width);
 }
 
+/**
+ * Роздільник — на правому краї клітинки, точно там, де градієнт сітки малює
+ * свою лінію. Ліворуч його немає: інакше шапка й сітка розійшлись би на піксель.
+ */
 .rt__axis-cell {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    border-right: 1px solid var(--rt-grid-line);
     padding: 6px 2px;
     font-size: 12px;
     line-height: 1.2;
