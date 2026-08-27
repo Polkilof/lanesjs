@@ -27,6 +27,7 @@
                     v-for="visible in visibleRows"
                     :key="visible.row.resource.id"
                     class="rt__resource"
+                    :class="{ 'rt__resource--last': visible.isLast }"
                     :style="rowStyle(visible)"
                 >
                     <slot name="resource" :resource="visible.row.resource">
@@ -54,6 +55,7 @@
                     v-for="visible in visibleRows"
                     :key="visible.row.resource.id"
                     class="rt__row"
+                    :class="{ 'rt__row--last': visible.isLast }"
                     :style="rowStyle(visible)"
                     :data-resource="visible.row.resource.id"
                 >
@@ -265,12 +267,19 @@ interface VisibleRow {
     row: Row<R, I>;
     top: number;
     height: number;
+    /** Останній рядок не малює нижній роздільник — там уже край контейнера. */
+    isLast: boolean;
 }
 
 const visibleRows = computed<VisibleRow[]>(() =>
     layout.value.rows.slice(slice.value.start, slice.value.end).map((row, position) => {
         const index = slice.value.start + position;
-        return { row, top: offsets.value[index], height: rowHeights.value[index] };
+        return {
+            row,
+            top: offsets.value[index],
+            height: rowHeights.value[index],
+            isLast: index === layout.value.rows.length - 1,
+        };
     }),
 );
 
@@ -466,6 +475,16 @@ defineExpose({ layout, syncViewport, scrollToDate });
  * узагалі не чіпати theme, а просто перевизначити токени у своєму блоці.
  */
 :where(.rt) {
+    /* Лінія на правому краї слота, а не на лівому: інакше перша збіглася б
+       із рамкою контейнера й читалася як подвійна. Один опис для шапки й
+       сітки, щоб вони не могли розійтись. */
+    --rt-grid-lines: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(var(--rt-slot-width) - 1px),
+        var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
+        var(--rt-grid-line) var(--rt-slot-width)
+    );
     --rt-radius: 4px;
     --rt-surface: #ffffff;
     --rt-header-bg: #ffffff;
@@ -524,8 +543,20 @@ defineExpose({ layout, syncViewport, scrollToDate });
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--rt-header-bg);
+    background-color: var(--rt-header-bg);
     border-bottom: 1px solid var(--rt-grid-line);
+}
+
+/**
+ * Роздільники шапки — той самий градієнт, що й у сітці, а не бордери клітинок.
+ * Браузер округлює колонки grid до 1/64 пікселя, похибка накопичується вздовж
+ * місяця, і бордер клітинки роз'їжджався з лінією сітки на видимий піксель.
+ * Спільний градієнт розійтися не може за побудовою.
+ */
+.rt__axis {
+    background-image: var(--rt-grid-lines);
+    background-size: calc(100% - 1px) 100%;
+    background-repeat: no-repeat;
 }
 
 .rt__corner {
@@ -540,22 +571,12 @@ defineExpose({ layout, syncViewport, scrollToDate });
     grid-auto-columns: var(--rt-slot-width);
 }
 
-/**
- * Роздільник — на правому краї клітинки, точно там, де градієнт сітки малює
- * свою лінію. Ліворуч його немає: інакше шапка й сітка розійшлись би на піксель.
- */
 .rt__axis-cell {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    border-right: 1px solid var(--rt-grid-line);
     padding: 6px 2px;
-}
-
-/* Останній край належить рамці контейнера, а не роздільнику дня */
-.rt__axis-cell:last-child {
-    border-right: none;
     font-size: 12px;
     line-height: 1.2;
     text-align: center;
@@ -607,16 +628,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
        інакше сітка стане вужчою за шапку на товщину рамок. */
     box-sizing: content-box;
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
-    /* Лінія на правому краї слота, а не на лівому: інакше перша збіглася б
-       із рамкою контейнера й читалася як подвійна. Останню лінію теж не
-       малюємо — правий край закриває рамка, як і лівий. */
-    background-image: repeating-linear-gradient(
-        to right,
-        transparent 0,
-        transparent calc(var(--rt-slot-width) - 1px),
-        var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
-        var(--rt-grid-line) var(--rt-slot-width)
-    );
+    /* Останню лінію не малюємо — правий край закриває рамка, як і лівий. */
+    background-image: var(--rt-grid-lines);
     background-size: calc(100% - 1px) 100%;
     background-repeat: no-repeat;
 }
@@ -642,6 +655,12 @@ defineExpose({ layout, syncViewport, scrollToDate });
     right: 0;
     box-sizing: border-box;
     border-bottom: 1px solid var(--rt-grid-line);
+}
+
+/* Нижній край списку належить рамці контейнера, як і правий */
+.rt__row--last,
+.rt__resource--last {
+    border-bottom: none;
 }
 
 .rt__background {

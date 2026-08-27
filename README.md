@@ -87,7 +87,13 @@ grep -rni 'employee\|absence\|holiday\|hrm' --include='*.ts' --include='*.vue' s
 `.rt__resources` · `.rt__resource` · `.rt__body` · `.rt__column` · `.rt__row` ·
 `.rt__bar` · `.rt__background`
 
-Модифікатори `--today`, `--weekend`, `--clipped-start`, `--clipped-end` — теж.
+Модифікатори `--today`, `--weekend`, `--clipped-start`, `--clipped-end`,
+`--last` — теж.
+
+Роздільники днів малює змінна `--rt-grid-lines` — один градієнт і для шапки,
+і для сітки. Розділяти їх не можна: браузер округлює колонки grid до 1/64
+пікселя, похибка накопичується вздовж місяця, і бордери клітинок розходяться
+з лініями сітки на видимий піксель.
 Усе, що не в цьому списку, вважати внутрішнім.
 
 ## Тести
