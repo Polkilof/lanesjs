@@ -5,6 +5,7 @@
  * у `LayoutInput`. Координати віддаються у слотах, не в пікселях (рішення 06).
  */
 
+import { addDays, diffDays, startOfWeek, toEpoch, toIso, toLocalDate, weekday } from "./date";
 import type {
     DateRange,
     IsoDate,
@@ -17,45 +18,8 @@ import type {
     SlotStep,
 } from "./types";
 
-const MS_PER_DAY = 86_400_000;
 const DEFAULT_WEEKEND_DAYS = [0, 6];
 const DEFAULT_WEEK_STARTS_ON = 1;
-
-/**
- * YYYY-MM-DD → епоха UTC-опівночі. Уся арифметика йде в UTC, щоб перехід на
- * літній час не зсував межі днів; локальний час з'являється лише в `Slot.date`.
- */
-function toEpoch(date: IsoDate): number {
-    const [year, month, day] = date.split("-").map(Number);
-    return Date.UTC(year, month - 1, day);
-}
-
-function toIso(epoch: number): IsoDate {
-    return new Date(epoch).toISOString().slice(0, 10);
-}
-
-/** Локальна опівніч — лише для форматерів у шарі vue (рішення 05). */
-function toLocalDate(epoch: number): Date {
-    const utc = new Date(epoch);
-    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
-}
-
-function addDays(epoch: number, days: number): number {
-    return epoch + days * MS_PER_DAY;
-}
-
-function diffDays(from: number, to: number): number {
-    return Math.round((to - from) / MS_PER_DAY);
-}
-
-/** День тижня, 0 — неділя. */
-function weekday(epoch: number): number {
-    return new Date(epoch).getUTCDay();
-}
-
-function startOfWeek(epoch: number, weekStartsOn: number): number {
-    return addDays(epoch, -((weekday(epoch) - weekStartsOn + 7) % 7));
-}
 
 function slotSize(step: SlotStep): number {
     return step === "week" ? 7 : 1;

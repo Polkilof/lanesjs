@@ -87,7 +87,7 @@
  * Шар рендеру. Уся математика — в ядрі; тут лише перетворення слотів у пікселі
  * через calc() і жодного вимірювання DOM заради розкладки (рішення 06).
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { buildLayout } from "../core/layout";
 import type {
     DateRange,
@@ -129,6 +129,8 @@ const emit = defineEmits<{
     "cell-click": [payload: { date: IsoDate; resource: Resource<R> }];
     "item-click": [payload: { item: Item<I>; resource: Resource<R> }];
     "slot-click": [payload: { slot: Slot }];
+    /** Фактичний діапазон осі — при тижневому кроці ширший за заданий у props. */
+    "range-change": [range: DateRange];
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -147,6 +149,17 @@ const layout = computed<Layout<R, I>>(() => {
         weekStartsOn: props.weekStartsOn,
     });
 });
+
+/**
+ * Застосунок вантажить дані на цю подію, а не на зміну props.range: при
+ * тижневому кроці вісь ширша, і вантажити треба саме видиме вікно.
+ * Стежимо за рядковим ключем, бо об'єкт діапазону новий на кожен перерахунок.
+ */
+watch(
+    () => `${layout.value.range.start}|${layout.value.range.end}`,
+    () => emit("range-change", layout.value.range),
+    { immediate: true },
+);
 
 /** У DOM потрапляють лише позначені колонки — решта сітки намальована градієнтом. */
 const markedSlots = computed(() => layout.value.slots.filter((slot) => slot.isToday || slot.isWeekend));
