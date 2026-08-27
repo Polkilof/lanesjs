@@ -86,7 +86,7 @@ import { computed, ref } from "vue";
 import Timeline from "../vue/Timeline.vue";
 import { useTimelineRange } from "../vue/useTimelineRange";
 import { drag } from "../pro/drag";
-import type { DragMove } from "../pro/drag";
+import type { DragMove, DragResize } from "../pro/drag";
 import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
 
 interface Room {
@@ -118,7 +118,7 @@ const { range, title, prev, next, today } = useTimelineRange({ date: "2026-03-01
  */
 const draggable = ref(false);
 const plugins = computed<Plugin<Room, Booking>[]>(() =>
-    draggable.value ? [drag<Room, Booking>({ onMove: applyMove })] : [],
+    draggable.value ? [drag<Room, Booking>({ onMove: applyMove, onResize: applyResize })] : [],
 );
 
 /**
@@ -129,11 +129,20 @@ const plugins = computed<Plugin<Room, Booking>[]>(() =>
 const moves = ref(new Map<string, { resourceId: string; start: string; end: string }>());
 
 function applyMove(move: DragMove<Room, Booking>) {
-    const next = new Map(moves.value);
-    next.set(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end });
-    moves.value = next;
-
+    remember(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end });
     lastAction.value = `переїзд ${move.item.meta?.guest}: ${move.to.title}, ${move.start} (${move.days} дн.)`;
+}
+
+function applyResize(resize: DragResize<Room, Booking>) {
+    // Ресурс при розтягуванні не змінюється — беремо той, у якому бар лежить
+    remember(resize.item.id, { resourceId: resize.resource.id, start: resize.start, end: resize.end });
+    lastAction.value = `край ${resize.edge}: ${resize.item.meta?.guest}, ${resize.start} → ${resize.end}`;
+}
+
+function remember(id: string, next: { resourceId: string; start: string; end: string }) {
+    const updated = new Map(moves.value);
+    updated.set(id, next);
+    moves.value = updated;
 }
 const highlightedDay = "2026-03-12";
 
