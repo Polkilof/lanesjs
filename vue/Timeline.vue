@@ -34,7 +34,7 @@
 
 
         <div ref="scrollerRef" class="rt__scroller" @scroll.passive="onScroll">
-            <div class="rt__grid">
+            <div ref="gridRef" class="rt__grid">
                 <div ref="resourcesRef" class="rt__resources" :style="{ height: totalHeight + 'px' }">
                 <div
                     v-for="visible in visibleRows"
@@ -232,6 +232,7 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
+const gridRef = ref<HTMLElement | null>(null);
 const resourcesRef = ref<HTMLElement | null>(null);
 const scrollerRef = ref<HTMLElement | null>(null);
 const headerTrackRef = ref<HTMLElement | null>(null);
@@ -390,7 +391,12 @@ function syncPageViewport() {
 }
 
 const headerHeight = ref(0);
-/** Ширина вмісту сітки — під неї підганяється прилипла смуга прокрутки. */
+/**
+ * Ширина вмісту сітки — під неї підганяється прилипла смуга прокрутки.
+ * Читається після переверстки, а не в тому ж проході, що задає колонки:
+ * інакше смуга запам'ятала б ширину «до підгонки» й показала б хід прокрутки
+ * там, де прокручувати вже нічого.
+ */
 const contentWidth = ref(0);
 
 function syncViewport() {
@@ -559,9 +565,15 @@ onMounted(() => {
         nextTick(() => scrollToDate(props.scrollTo as IsoDate));
     }
 
-    if (typeof ResizeObserver !== "undefined" && scrollerRef.value !== null) {
+    if (typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(syncViewport);
-        observer.observe(scrollerRef.value);
+        // Скролер каже, скільки місця є; сітка — скільки зайнято. Друге
+        // спостереження обов'язкове, бо ширину колонок задаємо ми самі: у
+        // проході, який її міняє, вміст ще старий, і справжня ширина відома
+        // лише на наступній верстці. Замкнутого кола немає — вимірювання
+        // спирається на проміжок і рамки, а вони від наших колонок не залежать.
+        if (scrollerRef.value !== null) observer.observe(scrollerRef.value);
+        if (gridRef.value !== null) observer.observe(gridRef.value);
     }
 
     for (const plugin of props.plugins ?? []) {
