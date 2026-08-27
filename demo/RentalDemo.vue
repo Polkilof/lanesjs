@@ -28,7 +28,7 @@
 
             <label class="demo__control">
                 <input v-model="draggable" type="checkbox" />
-                Перетягування (pro)
+                Редагування (pro)
             </label>
 
             <span class="demo__stat">рядків: {{ rooms.length }} · броней: {{ bookings.length }}</span>
@@ -86,7 +86,9 @@ import { computed, ref } from "vue";
 import Timeline from "../vue/Timeline.vue";
 import { useTimelineRange } from "../vue/useTimelineRange";
 import { drag } from "../pro/drag";
+import { create } from "../pro/create";
 import type { DragMove, DragResize } from "../pro/drag";
+import type { DragCreate } from "../pro/create";
 import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
 
 interface Room {
@@ -118,7 +120,12 @@ const { range, title, prev, next, today } = useTimelineRange({ date: "2026-03-01
  */
 const draggable = ref(false);
 const plugins = computed<Plugin<Room, Booking>[]>(() =>
-    draggable.value ? [drag<Room, Booking>({ onMove: applyMove, onResize: applyResize })] : [],
+    draggable.value
+        ? [
+              drag<Room, Booking>({ onMove: applyMove, onResize: applyResize }),
+              create<Room, Booking>({ onCreate: applyCreate }),
+          ]
+        : [],
 );
 
 /**
@@ -127,6 +134,9 @@ const plugins = computed<Plugin<Room, Booking>[]>(() =>
  * поверх згенерованих броней, а не правка на місці.
  */
 const moves = ref(new Map<string, { resourceId: string; start: string; end: string }>());
+
+/** Створені виділенням — теж окремо від генератора, з тієї ж причини. */
+const added = ref<Item<Booking>[]>([]);
 
 function applyMove(move: DragMove<Room, Booking>) {
     remember(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end });
@@ -137,6 +147,22 @@ function applyResize(resize: DragResize<Room, Booking>) {
     // Ресурс при розтягуванні не змінюється — беремо той, у якому бар лежить
     remember(resize.item.id, { resourceId: resize.resource.id, start: resize.start, end: resize.end });
     lastAction.value = `край ${resize.edge}: ${resize.item.meta?.guest}, ${resize.start} → ${resize.end}`;
+}
+
+function applyCreate(created: DragCreate<Room>) {
+    const id = `new-${added.value.length + 1}`;
+    added.value = [
+        ...added.value,
+        {
+            id,
+            resourceId: created.resource.id,
+            start: created.start,
+            end: created.end,
+            meta: { guest: "Нова броня", status: "pending" },
+        },
+    ];
+
+    lastAction.value = `виділено ${created.days} дн.: ${created.resource.title}, ${created.start} → ${created.end}`;
 }
 
 function remember(id: string, next: { resourceId: string; start: string; end: string }) {
@@ -179,7 +205,7 @@ const bookings = computed<Item<Booking>[]>(() => {
         }
     });
 
-    return result;
+    return [...result, ...added.value];
 });
 
 function iso(day: number): string {

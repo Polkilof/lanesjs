@@ -4,14 +4,16 @@
  * застосунку. Дані лишаються там, де й були — компонент керований, і плагін не
  * має права заводити власне сховище (рішення 04).
  *
- * Обидва жести живуть в одному плагіні, бо починаються з того самого
- * pointerdown: два плагіни билися б за нього, і виграв би той, кого підключили
- * першим. Що саме почалось, вирішує місце захвату — край чи середина.
+ * Обидва жести живуть в одному плагіні, бо починаються з того самого захвату
+ * бара: що саме почалось, вирішує місце — край чи середина. Створення
+ * виділенням натомість починається з порожнього місця, тож воно окремо.
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
 import { addDays, diffDays, toEpoch, toIso } from "../core/date";
-import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource, Row } from "../core/types";
+import { makeGhost, trackPointer } from "./gesture";
+import type { Target } from "./gesture";
+import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource } from "../core/types";
 
 export type DragEdge = "start" | "end";
 
@@ -47,23 +49,13 @@ export interface DragOptions<R = unknown, I = unknown> {
     onResize?: (resize: DragResize<R, I>) => void;
     /** Клас на привида — щоб застосунок оформив його по-своєму. */
     className?: string;
-    /**
-     * Скільки пікселів треба провезти, перш ніж це вважатиметься тягненням.
-     * Без порога кожен клік по бару починав би перетягування, і клік зникав би.
-     */
+    /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
     threshold?: number;
     /** Ширина зони захвату краю. */
     edgeSize?: number;
 }
 
-/** Прямокутник, який показує привид; обидва жести зводяться до нього. */
-interface Target {
-    slotIndex: number;
-    slotSpan: number;
-    resourceIndex: number;
-}
-
-interface Gesture<R, I> {
+interface Grab<R, I> {
     placed: PlacedItem<I>;
     resource: Resource<R>;
     resourceIndex: number;
@@ -71,15 +63,9 @@ interface Gesture<R, I> {
     edge: DragEdge | null;
     /** За скільки днів від початку бара його схопили. */
     grabOffset: number;
-    origin: { x: number; y: number };
-    active: boolean;
-    target: Target | null;
 }
 
 export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}): Plugin<R, I> {
-    const threshold = options.threshold ?? 4;
-    const edgeSize = options.edgeSize ?? 6;
-
     return {
         name: "drag",
         setup(ctx: PluginContext<R, I>) {
@@ -92,16 +78,23 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             // можуть виконатись і до неї.
             const root: HTMLElement = rootEl;
             const overlay: HTMLElement = overlayEl;
+            const edgeSize = options.edgeSize ?? 6;
 
-            let gesture: Gesture<R, I> | null = null;
-            let ghost: HTMLElement | null = null;
             let hovered: HTMLElement | null = null;
 
-            function findBar(id: string): { placed: PlacedItem<I>; row: Row<R, I>; index: number } | undefined {
+            function findBar(id: string): Grab<R, I> | undefined {
                 const rows = ctx.getLayout().rows;
                 for (let index = 0; index < rows.length; index++) {
                     const placed = rows[index].bars.find((candidate) => candidate.item.id === id);
-                    if (placed !== undefined) return { placed, row: rows[index], index };
+                    if (placed !== undefined) {
+                        return {
+                            placed,
+                            resource: rows[index].resource,
+                            resourceIndex: index,
+                            edge: null,
+                            grabOffset: 0,
+                        };
+                    }
                 }
                 return undefined;
             }
@@ -121,37 +114,8 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 return null;
             }
 
-            function showGhost(target: Target) {
-                const { slotWidth, rowOffsets } = ctx.getGeometry();
-                if (ghost === null) {
-                    ghost = document.createElement("div");
-                    ghost.className = ["rt__ghost", options.className].filter(Boolean).join(" ");
-                    // Базовий вигляд інлайном: привид має бути видимий і тоді,
-                    // коли застосунок про нього ще нічого не знає.
-                    ghost.style.cssText =
-                        "position:absolute;border:1px dashed currentColor;border-radius:var(--rt-radius);" +
-                        "background:rgba(127,127,127,0.12);pointer-events:none";
-                    overlay.appendChild(ghost);
-                }
-
-                const top = rowOffsets[target.resourceIndex];
-                ghost.style.left = `${target.slotIndex * slotWidth}px`;
-                ghost.style.width = `${target.slotSpan * slotWidth}px`;
-                ghost.style.top = `${top}px`;
-                ghost.style.height = `${rowOffsets[target.resourceIndex + 1] - top}px`;
-            }
-
-            function stop() {
-                ghost?.remove();
-                ghost = null;
-                gesture = null;
-                root.style.userSelect = "";
-            }
-
             /** Курсор біля краю — інакше про розтягування ніхто не здогадається. */
             function onHover(event: MouseEvent) {
-                if (gesture !== null) return;
-
                 const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
                 if (hovered !== null && hovered !== bar) {
                     hovered.style.cursor = "";
@@ -161,77 +125,6 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
 
                 bar.style.cursor = edgeAt(bar, event.clientX) === null ? "" : "ew-resize";
                 hovered = bar;
-            }
-
-            function onPointerDown(event: MouseEvent) {
-                if (event.button !== 0) return;
-
-                const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
-                const id = bar?.dataset.item;
-                if (bar === undefined || bar === null || id === undefined) return;
-
-                const found = findBar(id);
-                const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
-                if (found === undefined || hit === null) return;
-
-                const edge = edgeAt(bar, event.clientX);
-                // Жест без обробника не починається: тягнути бар, який нікуди
-                // не поїде, гірше, ніж не тягнути його зовсім.
-                if (edge === null && options.onMove === undefined) return;
-
-                gesture = {
-                    placed: found.placed,
-                    resource: found.row.resource,
-                    resourceIndex: found.index,
-                    edge,
-                    grabOffset: hit.slot.index - found.placed.slotIndex,
-                    origin: { x: event.clientX, y: event.clientY },
-                    active: false,
-                    target: null,
-                };
-            }
-
-            /** Куди веде жест при поточному положенні вказівника. */
-            function targetOf(current: Gesture<R, I>, hitIndex: number, hitRow: number): Target {
-                const slots = ctx.getLayout().slots.length;
-                const start = current.placed.slotIndex;
-                const end = start + current.placed.slotSpan;
-
-                if (current.edge === "start") {
-                    // День мінімум: край не може перескочити протилежний
-                    const next = Math.min(Math.max(hitIndex, 0), end - 1);
-                    return { slotIndex: next, slotSpan: end - next, resourceIndex: current.resourceIndex };
-                }
-
-                if (current.edge === "end") {
-                    const next = Math.min(Math.max(hitIndex + 1, start + 1), slots);
-                    return { slotIndex: start, slotSpan: next - start, resourceIndex: current.resourceIndex };
-                }
-
-                // Переїзд: бар, вивезений за край осі, не коротшає — впирається
-                const span = current.placed.slotSpan;
-                const next = Math.min(Math.max(hitIndex - current.grabOffset, 0), slots - span);
-                return { slotIndex: next, slotSpan: span, resourceIndex: hitRow };
-            }
-
-            function onPointerMove(event: MouseEvent) {
-                if (gesture === null) return;
-
-                if (!gesture.active) {
-                    const moved =
-                        Math.abs(event.clientX - gesture.origin.x) + Math.abs(event.clientY - gesture.origin.y);
-                    if (moved < threshold) return;
-
-                    gesture.active = true;
-                    // Інакше тягнення виділяє підписи барів і рядків
-                    root.style.userSelect = "none";
-                }
-
-                const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
-                if (hit === null) return;
-
-                gesture.target = targetOf(gesture, hit.slot.index, hit.resourceIndex);
-                showGhost(gesture.target);
             }
 
             /**
@@ -248,32 +141,16 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 return toIso(addDays(toEpoch(date), days));
             }
 
-            function commit() {
-                if (gesture === null || gesture.target === null) return;
-
-                const { placed, target } = gesture;
-                const unchanged = target.slotIndex === placed.slotIndex && target.slotSpan === placed.slotSpan;
-
-                if (gesture.edge !== null) {
-                    if (unchanged) return;
-                    commitResize(gesture, target);
-                    return;
-                }
-
-                if (unchanged && target.resourceIndex === gesture.resourceIndex) return;
-                commitMove(gesture, target);
-            }
-
-            function commitMove(current: Gesture<R, I>, target: Target) {
+            function commitMove(grab: Grab<R, I>, target: Target) {
                 const to = ctx.getLayout().rows[target.resourceIndex]?.resource;
                 if (to === undefined || options.onMove === undefined) return;
 
-                const item = current.placed.item;
-                const days = shiftBetween(current.placed.slotIndex, target.slotIndex);
+                const item = grab.placed.item;
+                const days = shiftBetween(grab.placed.slotIndex, target.slotIndex);
 
                 options.onMove({
                     item,
-                    from: current.resource,
+                    from: grab.resource,
                     to,
                     start: shiftIso(item.start, days),
                     end: shiftIso(item.end, days),
@@ -281,18 +158,18 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 });
             }
 
-            function commitResize(current: Gesture<R, I>, target: Target) {
-                if (options.onResize === undefined || current.edge === null) return;
+            function commitResize(grab: Grab<R, I>, target: Target) {
+                if (options.onResize === undefined || grab.edge === null) return;
 
-                const item = current.placed.item;
-                const start = current.placed.slotIndex;
-                const end = start + current.placed.slotSpan;
+                const item = grab.placed.item;
+                const start = grab.placed.slotIndex;
+                const end = start + grab.placed.slotSpan;
 
-                if (current.edge === "start") {
+                if (grab.edge === "start") {
                     const days = shiftBetween(start, target.slotIndex);
                     options.onResize({
                         item,
-                        resource: current.resource,
+                        resource: grab.resource,
                         edge: "start",
                         start: shiftIso(item.start, days),
                         end: item.end,
@@ -305,31 +182,84 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 const days = shiftBetween(end - 1, target.slotIndex + target.slotSpan - 1);
                 options.onResize({
                     item,
-                    resource: current.resource,
+                    resource: grab.resource,
                     edge: "end",
                     start: item.start,
                     end: shiftIso(item.end, days),
                 });
             }
 
-            function onPointerUp() {
-                commit();
-                stop();
-            }
+            const ghost = makeGhost(overlay, options.className);
+            const untrack = trackPointer<Grab<R, I>>(
+                {
+                    root,
+                    threshold: options.threshold ?? 4,
 
-            root.addEventListener("pointerdown", onPointerDown);
+                    press(event) {
+                        const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
+                        const id = bar?.dataset.item;
+                        if (bar === null || bar === undefined || id === undefined) return null;
+
+                        const grab = findBar(id);
+                        const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
+                        if (grab === undefined || hit === null) return null;
+
+                        const edge = edgeAt(bar, event.clientX);
+                        // Жест без обробника не починається: тягнути бар, який
+                        // нікуди не поїде, гірше, ніж не тягнути його зовсім.
+                        if (edge === null && options.onMove === undefined) return null;
+
+                        grab.edge = edge;
+                        grab.grabOffset = hit.slot.index - grab.placed.slotIndex;
+                        return grab;
+                    },
+
+                    track(grab, event) {
+                        const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
+                        if (hit === null) return null;
+
+                        const slots = ctx.getLayout().slots.length;
+                        const start = grab.placed.slotIndex;
+                        const end = start + grab.placed.slotSpan;
+
+                        if (grab.edge === "start") {
+                            // День мінімум: край не може перескочити протилежний
+                            const next = Math.min(Math.max(hit.slot.index, 0), end - 1);
+                            return { slotIndex: next, slotSpan: end - next, resourceIndex: grab.resourceIndex };
+                        }
+
+                        if (grab.edge === "end") {
+                            const next = Math.min(Math.max(hit.slot.index + 1, start + 1), slots);
+                            return { slotIndex: start, slotSpan: next - start, resourceIndex: grab.resourceIndex };
+                        }
+
+                        // Переїзд: бар, вивезений за край осі, не коротшає —
+                        // він просто впирається.
+                        const span = grab.placed.slotSpan;
+                        const next = Math.min(Math.max(hit.slot.index - grab.grabOffset, 0), slots - span);
+                        return { slotIndex: next, slotSpan: span, resourceIndex: hit.resourceIndex };
+                    },
+
+                    commit(grab, target) {
+                        const moved =
+                            target.slotIndex !== grab.placed.slotIndex ||
+                            target.slotSpan !== grab.placed.slotSpan ||
+                            target.resourceIndex !== grab.resourceIndex;
+                        if (!moved) return;
+
+                        if (grab.edge === null) commitMove(grab, target);
+                        else commitResize(grab, target);
+                    },
+                },
+                ghost,
+                () => ctx.getGeometry(),
+            );
+
             root.addEventListener("pointermove", onHover);
-            window.addEventListener("pointermove", onPointerMove);
-            window.addEventListener("pointerup", onPointerUp);
-            window.addEventListener("pointercancel", onPointerUp);
 
             return () => {
-                root.removeEventListener("pointerdown", onPointerDown);
                 root.removeEventListener("pointermove", onHover);
-                window.removeEventListener("pointermove", onPointerMove);
-                window.removeEventListener("pointerup", onPointerUp);
-                window.removeEventListener("pointercancel", onPointerUp);
-                stop();
+                untrack();
             };
         },
     };
