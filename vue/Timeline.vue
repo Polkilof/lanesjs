@@ -55,6 +55,7 @@
                         v-for="placed in row.backgrounds"
                         :key="placed.item.id"
                         class="rt__background"
+                        :class="props.itemClass?.(placed, row.resource)"
                         :style="{ left: px(placed.slotIndex), width: px(placed.slotSpan) }"
                         aria-hidden="true"
                     >
@@ -65,10 +66,13 @@
                         v-for="placed in row.bars"
                         :key="placed.item.id"
                         class="rt__bar"
-                        :class="{
-                            'rt__bar--clipped-start': placed.clippedStart,
-                            'rt__bar--clipped-end': placed.clippedEnd,
-                        }"
+                        :class="[
+                            {
+                                'rt__bar--clipped-start': placed.clippedStart,
+                                'rt__bar--clipped-end': placed.clippedEnd,
+                            },
+                            props.itemClass?.(placed, row.resource),
+                        ]"
                         :style="barStyle(placed)"
                         @click.stop="emit('item-click', { item: placed.item, resource: row.resource })"
                     >
@@ -112,6 +116,8 @@ const props = withDefaults(
         weekendDays?: number[];
         weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         plugins?: Plugin<R, I>[];
+        /** Класи на бар — єдиний спосіб пофарбувати подію за її даними. */
+        itemClass?: (placed: PlacedItem<I>, resource: Resource<R>) => string | string[] | undefined;
         /** Ширина слота й панелі ресурсів; решта оформлення — через токени --rt-*. */
         slotWidth?: string;
         resourceWidth?: string;
