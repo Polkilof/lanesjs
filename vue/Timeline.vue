@@ -10,8 +10,11 @@
                     v-for="slot in layout.slots"
                     :key="slot.start"
                     class="rt__axis-cell"
-                    :class="{ 'rt__axis-cell--today': slot.isToday, 'rt__axis-cell--weekend': slot.isWeekend }"
-                    @click="emit('slot-click', { slot })"
+                    :class="[
+                        { 'rt__axis-cell--today': slot.isToday, 'rt__axis-cell--weekend': slot.isWeekend },
+                        props.slotClass?.(slot),
+                    ]"
+                    @click="onSlotLabelClick($event, slot)"
                 >
                     <slot name="slot-label" :slot-data="slot">
                         {{ slot.date.getDate() }}
@@ -39,7 +42,10 @@
                     v-for="slot in markedSlots"
                     :key="slot.start"
                     class="rt__column"
-                    :class="{ 'rt__column--today': slot.isToday, 'rt__column--weekend': slot.isWeekend }"
+                    :class="[
+                        { 'rt__column--today': slot.isToday, 'rt__column--weekend': slot.isWeekend },
+                        props.slotClass?.(slot),
+                    ]"
                     :style="{ left: px(slot.index), width: px(1) }"
                     aria-hidden="true"
                 />
@@ -77,7 +83,7 @@
                             props.itemClass?.(placed, visible.row.resource),
                         ]"
                         :style="[barStyle(placed), props.itemStyle?.(placed, visible.row.resource)]"
-                        @click.stop="emit('item-click', { item: placed.item, resource: visible.row.resource })"
+                        @click.stop="onBarClick($event, placed.item, visible.row.resource)"
                     >
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
                             {{ placed.item.id }}
@@ -132,6 +138,11 @@ const props = withDefaults(
          * з API, класом його не передаси. Тут же перевизначаються --rt-bar-*.
          */
         itemStyle?: (placed: PlacedItem<I>, resource: Resource<R>) => Record<string, string> | undefined;
+        /**
+         * Класи на колонку — свята, блекаути, межі спринтів. Слот із класом
+         * отримує накладку на всю висоту нарівні з «сьогодні» й вихідними.
+         */
+        slotClass?: (slot: Slot) => string | string[] | undefined;
         /** Розміри в пікселях. Кольори й решта оформлення — через токени --rt-*. */
         slotWidth?: number;
         resourceWidth?: number;
@@ -156,10 +167,15 @@ const props = withDefaults(
     },
 );
 
+/**
+ * У payload іде і подія, і `target` — елемент, до якого можна прив'язати попап
+ * чи меню. Окреме поле не зайве: `event.currentTarget` обнуляється, щойно
+ * діспатч завершився, тож збережена подія віддала б null.
+ */
 const emit = defineEmits<{
-    "cell-click": [payload: { date: IsoDate; resource: Resource<R> }];
-    "item-click": [payload: { item: Item<I>; resource: Resource<R> }];
-    "slot-click": [payload: { slot: Slot }];
+    "cell-click": [payload: { date: IsoDate; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
+    "item-click": [payload: { item: Item<I>; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
+    "slot-click": [payload: { slot: Slot; event: MouseEvent; target: HTMLElement }];
     /** Фактичний діапазон осі — при тижневому кроці ширший за заданий у props. */
     "range-change": [range: DateRange];
 }>();
@@ -192,8 +208,19 @@ watch(
     { immediate: true },
 );
 
-/** У DOM потрапляють лише позначені колонки — решта сітки намальована градієнтом. */
-const markedSlots = computed(() => layout.value.slots.filter((slot) => slot.isToday || slot.isWeekend));
+/**
+ * У DOM потрапляють лише позначені колонки — решта сітки намальована
+ * градієнтом. Власний клас від застосунку теж робить колонку позначеною,
+ * інакше свята й блекаути не було б чим малювати.
+ */
+function hasSlotClass(slot: Slot): boolean {
+    const value = props.slotClass?.(slot);
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+}
+
+const markedSlots = computed(() =>
+    layout.value.slots.filter((slot) => slot.isToday || slot.isWeekend || hasSlotClass(slot)),
+);
 
 /* ── Віртуалізація рядків ─────────────────────────────────────────────── */
 
@@ -269,6 +296,14 @@ function barStyle(placed: PlacedItem<I>) {
     };
 }
 
+function onSlotLabelClick(event: MouseEvent, slot: Slot) {
+    emit("slot-click", { slot, event, target: event.currentTarget as HTMLElement });
+}
+
+function onBarClick(event: MouseEvent, item: Item<I>, resource: Resource<R>) {
+    emit("item-click", { item, resource, event, target: event.currentTarget as HTMLElement });
+}
+
 /**
  * Клік по порожньому місцю. Колонку рахуємо з відступу всередині рядка — це
  * єдине читання геометрії, і на розкладку воно не впливає.
@@ -287,7 +322,7 @@ function onBodyClick(event: MouseEvent) {
     const slot = layout.value.slots[Math.floor((offset / rowEl.offsetWidth) * slotCount)];
     if (slot === undefined) return;
 
-    emit("cell-click", { date: slot.start, resource });
+    emit("cell-click", { date: slot.start, resource, event, target: rowEl });
 }
 
 /* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
