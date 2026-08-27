@@ -574,12 +574,14 @@ defineExpose({ layout, syncViewport, scrollToDate });
 .rt__body {
     position: relative;
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
+    /* Лінія на правому краї слота, а не на лівому: інакше перша збіглася б
+       із рамкою контейнера й читалася як подвійна. */
     background-image: repeating-linear-gradient(
         to right,
-        var(--rt-grid-line) 0,
-        var(--rt-grid-line) 1px,
-        transparent 1px,
-        transparent var(--rt-slot-width)
+        transparent 0,
+        transparent calc(var(--rt-slot-width) - 1px),
+        var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
+        var(--rt-grid-line) var(--rt-slot-width)
     );
 }
 
