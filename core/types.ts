@@ -128,10 +128,41 @@ export interface TimelineEvents<R = unknown, I = unknown> {
  * Те, що плагін отримує на старті. Мінімальна поверхня: читати розкладку,
  * слухати події, просити перерахунок.
  */
+/**
+ * Геометрія сітки в пікселях. Плагін не має права її вимірювати сам: ширина
+ * дня й висоти рядків — результат вирівнювання по пристроєвих пікселях, і
+ * повторне вимірювання дало б інші числа, ніж ті, за якими малює компонент.
+ */
+export interface Geometry {
+    slotWidth: number;
+    /** Верх кожного рядка від початку тіла; довжина на одиницю більша. */
+    rowOffsets: number[];
+}
+
+/** Що лежить під точкою. Порожні місця теж влучання — там створюють події. */
+export interface HitTest<R = unknown> {
+    resource: Resource<R>;
+    resourceIndex: number;
+    slot: Slot;
+    date: IsoDate;
+}
+
 export interface PluginContext<R = unknown, I = unknown> {
     getLayout(): Layout<R, I>;
     /** Кореневий елемент; у ядрі завжди null, заповнює шар vue. */
     getRoot(): HTMLElement | null;
+    /**
+     * Шар для власних накладок плагіна — привидів перетягування, рамок
+     * виділення. Лежить у координатах сітки й не ловить вказівник, тож
+     * плагін малює в ньому, не заважаючи клікам по барах.
+     */
+    getOverlay(): HTMLElement | null;
+    getGeometry(): Geometry;
+    /**
+     * Ресурс і день під точкою у координатах вікна — тими самими, що їх дає
+     * подія вказівника. Поза сіткою — null.
+     */
+    hitTest(point: { x: number; y: number }): HitTest<R> | null;
     /** Підписка; повертає функцію відписки. */
     on<K extends keyof TimelineEvents<R, I>>(
         event: K,

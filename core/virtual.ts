@@ -26,8 +26,12 @@ export interface RowSlice {
     end: number;
 }
 
-/** Останній рядок, чиє зміщення не більше за позицію. */
-function rowAt(offsets: number[], position: number): number {
+/**
+ * Останній рядок, чиє зміщення не більше за позицію. Експортований, бо тим
+ * самим пошуком користується і влучання вказівника: рядок під курсором — це
+ * та сама задача, що й перший видимий рядок, тільки з іншим числом на вході.
+ */
+export function rowAt(offsets: number[], position: number): number {
     const lastRow = offsets.length - 2;
     if (position <= 0) return 0;
     if (position >= offsets[lastRow + 1]) return lastRow;

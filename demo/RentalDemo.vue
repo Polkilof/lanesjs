@@ -26,16 +26,23 @@
                 </select>
             </label>
 
+            <label class="demo__control">
+                <input v-model="preview" type="checkbox" />
+                Привид перетягування
+            </label>
+
             <span class="demo__stat">рядків: {{ rooms.length }} · броней: {{ bookings.length }}</span>
         </header>
 
         <Timeline
+            :key="preview ? 'with-preview' : 'plain'"
             class="demo__timeline"
             :resources="rooms"
             :items="bookings"
             :range="range"
             :today="highlightedDay"
             :item-class="bookingClass"
+            :plugins="plugins"
             :theme="theme"
             :slot-width="44"
             :resource-width="180"
@@ -78,7 +85,8 @@
 import { computed, ref } from "vue";
 import Timeline from "../vue/Timeline.vue";
 import { useTimelineRange } from "../vue/useTimelineRange";
-import type { Item, PlacedItem, Resource } from "../core/types";
+import { dragPreview } from "../pro/dragPreview";
+import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
 
 interface Room {
     floor: number;
@@ -98,6 +106,17 @@ const lastAction = ref("");
 const theme = ref<"auto" | "light" | "dark">("auto");
 
 const { range, title, prev, next, today } = useTimelineRange({ date: "2026-03-01", locale: "uk-UA" });
+
+/**
+ * Платний шар підключається як звичайний плагін — через той самий проп, що й
+ * будь-який чужий. Якщо колись сюди знадобиться щось, чого немає в контракті,
+ * це дірка в API, а не привід зазирнути в нутрощі.
+ *
+ * Список перебудовується разом із ключем компонента: плагіни читаються один
+ * раз на монтуванні, тож перемикач має піднімати таймлайн наново.
+ */
+const preview = ref(false);
+const plugins = computed<Plugin<Room, Booking>[]>(() => (preview.value ? [dragPreview<Room, Booking>()] : []));
 const highlightedDay = "2026-03-12";
 
 const rooms = computed<Resource<Room>[]>(() =>

@@ -98,6 +98,7 @@
                             props.itemClass?.(placed, visible.row.resource),
                         ]"
                         :style="[barStyle(placed), props.itemStyle?.(placed, visible.row.resource)]"
+                        :data-item="placed.item.id"
                         @click.stop="onBarClick($event, placed.item, visible.row.resource)"
                     >
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
@@ -105,6 +106,11 @@
                         </slot>
                         </div>
                     </div>
+
+                    <!-- Шар накладок плагінів: привиди перетягування, рамки
+                         виділення. Вказівника не ловить, тож кліки по барах
+                         крізь нього проходять. -->
+                    <div ref="overlayRef" class="rt__overlay" aria-hidden="true" />
                 </div>
             </div>
         </div>
@@ -132,9 +138,11 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { buildLayout } from "../core/layout";
-import { rowOffsets, visibleSlice } from "../core/virtual";
+import { rowAt, rowOffsets, visibleSlice } from "../core/virtual";
 import type {
     DateRange,
+    Geometry,
+    HitTest,
     IsoDate,
     Item,
     Layout,
@@ -239,6 +247,7 @@ const emit = defineEmits<{
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
 const gridRef = ref<HTMLElement | null>(null);
+const overlayRef = ref<HTMLElement | null>(null);
 const resourcesRef = ref<HTMLElement | null>(null);
 const scrollerRef = ref<HTMLElement | null>(null);
 const headerTrackRef = ref<HTMLElement | null>(null);
@@ -636,24 +645,41 @@ function onBarClick(event: MouseEvent, item: Item<I>, resource: Resource<R>) {
 }
 
 /**
- * Клік по порожньому місцю. Колонку рахуємо з відступу всередині рядка — це
- * єдине читання геометрії, і на розкладку воно не впливає.
+ * Ресурс і день під точкою. Єдине місце, де геометрія читається назад — з
+ * пікселів у дані, — і тому ним користуються всі: і клік по порожньому місцю,
+ * і плагіни. Дві реалізації того самого розійшлися б на першому ж вирівнюванні.
  */
+function hitTest(point: { x: number; y: number }): HitTest<R> | null {
+    const body = bodyRef.value;
+    const slots = layout.value.slots;
+    const rows = layout.value.rows;
+    if (body === null || slots.length === 0 || rows.length === 0) return null;
+
+    // Панель ресурсів липка й лежить поверх сітки: те, що під нею, користувач
+    // не бачить, тож і влучанням це не є.
+    const pane = resourcesRef.value?.getBoundingClientRect();
+    if (pane !== undefined && point.x < pane.right) return null;
+
+    const rect = body.getBoundingClientRect();
+    const x = point.x - rect.left;
+    const y = point.y - rect.top;
+    if (x < 0 || y < 0 || x >= slotWidth.value * slots.length || y >= totalHeight.value) return null;
+
+    const resourceIndex = rowAt(offsets.value, y);
+    const slot = slots[Math.floor(x / slotWidth.value)];
+
+    return { resource: rows[resourceIndex].resource, resourceIndex, slot, date: slot.start };
+}
+
+/** Клік по порожньому місцю. */
 function onBodyClick(event: MouseEvent) {
     const rowEl = (event.target as HTMLElement).closest<HTMLElement>(".rt__row");
     if (rowEl === null) return;
 
-    const resource = props.resources.find((candidate) => candidate.id === rowEl.dataset.resource);
-    if (resource === undefined) return;
+    const hit = hitTest({ x: event.clientX, y: event.clientY });
+    if (hit === null) return;
 
-    const slotCount = layout.value.slots.length;
-    if (slotCount === 0) return;
-
-    const offset = event.clientX - rowEl.getBoundingClientRect().left;
-    const slot = layout.value.slots[Math.floor((offset / rowEl.offsetWidth) * slotCount)];
-    if (slot === undefined) return;
-
-    emit("cell-click", { date: slot.start, resource, event, target: rowEl });
+    emit("cell-click", { date: hit.date, resource: hit.resource, event, target: rowEl });
 }
 
 /* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
@@ -704,6 +730,9 @@ onMounted(() => {
         const teardown = plugin.setup({
             getLayout: () => layout.value,
             getRoot: () => rootRef.value,
+            getOverlay: () => overlayRef.value,
+            getGeometry: (): Geometry => ({ slotWidth: slotWidth.value, rowOffsets: offsets.value }),
+            hitTest,
             on: (event, handler) => subscribe(event, handler as ErasedHandler),
             requestUpdate: () => {
                 revision.value += 1;
@@ -987,6 +1016,18 @@ defineExpose({ layout, syncViewport, scrollToDate });
     position: absolute;
     top: 0;
     bottom: 0;
+    pointer-events: none;
+}
+
+/**
+ * Накладки плагінів. Вище рядків і барів — привид має лягати поверх того, що
+ * тягнуть, — і повністю прозорий для вказівника, інакше перший же привид
+ * перекрив би подію, заради якої його малюють.
+ */
+.rt__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
     pointer-events: none;
 }
 
