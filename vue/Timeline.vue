@@ -973,6 +973,10 @@ defineExpose({ layout, syncViewport, scrollToDate });
        інакше сітка стане вужчою за шапку на товщину рамок. */
     box-sizing: content-box;
     width: calc(var(--rt-slot-width) * var(--rt-slot-count));
+    /* Сітка фарбує своє тло сама, як панель ресурсів і шапка. Покладатись на
+       тло кореня не можна: застосунок, що розводить панелі в дві картки,
+       робить корінь прозорим — і тоді сітка лишалась би єдиною діркою. */
+    background-color: var(--rt-surface);
     /* Останню лінію не малюємо — правий край закриває рамка, як і лівий. */
     background-image: var(--rt-grid-lines);
     background-size: calc(100% - 2px) 100%;
