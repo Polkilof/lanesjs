@@ -122,11 +122,31 @@ const draggable = ref(false);
 const plugins = computed<Plugin<Room, Booking>[]>(() =>
     draggable.value
         ? [
-              drag<Room, Booking>({ onMove: applyMove, onResize: applyResize }),
-              create<Room, Booking>({ onCreate: applyCreate }),
+              drag<Room, Booking>({
+                  onMove: applyMove,
+                  onResize: applyResize,
+                  canMove: (move) => move.from.meta?.floor === move.to.meta?.floor && isFree(move),
+                  canResize: (resize) => isFree({ ...resize, to: resize.resource }),
+              }),
+              create<Room, Booking>({ onCreate: applyCreate, canCreate: (range) => isFree({ ...range, to: range.resource }) }),
           ]
         : [],
 );
+
+/**
+ * Правила готелю: броні не перетинаються, а між поверхами гість не переїжджає.
+ * Це і є те, заради чого плагін питає дозволу на кожному русі — межу правила
+ * видно під час жесту, а не після нього.
+ */
+function isFree(range: { to: Resource<Room>; start: string; end: string; item?: Item<Booking> }): boolean {
+    return !bookings.value.some(
+        (booking) =>
+            booking.resourceId === range.to.id &&
+            booking.id !== range.item?.id &&
+            booking.start < range.end &&
+            range.start < booking.end,
+    );
+}
 
 /**
  * Переїзди, які застосунок прийняв. Плагін нічого не мутує — він лише каже,

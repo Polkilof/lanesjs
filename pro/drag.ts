@@ -47,6 +47,13 @@ export interface DragOptions<R = unknown, I = unknown> {
      */
     onMove?: (move: DragMove<R, I>) => void;
     onResize?: (resize: DragResize<R, I>) => void;
+    /**
+     * Чи дозволено таку ціль. Питається на кожному русі, тож заборонене місце
+     * видно ще під час жесту — і відпускання на ньому нічого не робить.
+     * Правила знає застосунок: перетин із чужою подією, чужий рядок, минуле.
+     */
+    canMove?: (move: DragMove<R, I>) => boolean;
+    canResize?: (resize: DragResize<R, I>) => boolean;
     /** Клас на привида — щоб застосунок оформив його по-своєму. */
     className?: string;
     /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
@@ -141,25 +148,31 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 return toIso(addDays(toEpoch(date), days));
             }
 
-            function commitMove(grab: Grab<R, I>, target: Target) {
+            /**
+             * Що вийде з цієї цілі. Чисті функції, бо потрібні двічі: спершу
+             * щоб спитати дозволу під час руху, потім щоб віддати результат.
+             * Порахувати двома різними шляхами означало б рано чи пізно
+             * дозволити одне, а застосувати інше.
+             */
+            function moveOf(grab: Grab<R, I>, target: Target): DragMove<R, I> | null {
                 const to = ctx.getLayout().rows[target.resourceIndex]?.resource;
-                if (to === undefined || options.onMove === undefined) return;
+                if (to === undefined) return null;
 
                 const item = grab.placed.item;
                 const days = shiftBetween(grab.placed.slotIndex, target.slotIndex);
 
-                options.onMove({
+                return {
                     item,
                     from: grab.resource,
                     to,
                     start: shiftIso(item.start, days),
                     end: shiftIso(item.end, days),
                     days,
-                });
+                };
             }
 
-            function commitResize(grab: Grab<R, I>, target: Target) {
-                if (options.onResize === undefined || grab.edge === null) return;
+            function resizeOf(grab: Grab<R, I>, target: Target): DragResize<R, I> | null {
+                if (grab.edge === null) return null;
 
                 const item = grab.placed.item;
                 const start = grab.placed.slotIndex;
@@ -167,26 +180,34 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
 
                 if (grab.edge === "start") {
                     const days = shiftBetween(start, target.slotIndex);
-                    options.onResize({
+                    return {
                         item,
                         resource: grab.resource,
                         edge: "start",
                         start: shiftIso(item.start, days),
                         end: item.end,
-                    });
-                    return;
+                    };
                 }
 
                 // Ексклюзивний кінець зсуваємо за останнім укритим днем: сама
                 // колонка кінця може лежати вже за межами осі.
                 const days = shiftBetween(end - 1, target.slotIndex + target.slotSpan - 1);
-                options.onResize({
+                return {
                     item,
                     resource: grab.resource,
                     edge: "end",
                     start: item.start,
                     end: shiftIso(item.end, days),
-                });
+                };
+            }
+
+            /** Чи ціль узагалі відрізняється від того, що вже є. */
+            function changed(grab: Grab<R, I>, target: Target): boolean {
+                return (
+                    target.slotIndex !== grab.placed.slotIndex ||
+                    target.slotSpan !== grab.placed.slotSpan ||
+                    target.resourceIndex !== grab.resourceIndex
+                );
             }
 
             const ghost = makeGhost(overlay, options.className);
@@ -240,15 +261,31 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         return { slotIndex: next, slotSpan: span, resourceIndex: hit.resourceIndex };
                     },
 
-                    commit(grab, target) {
-                        const moved =
-                            target.slotIndex !== grab.placed.slotIndex ||
-                            target.slotSpan !== grab.placed.slotSpan ||
-                            target.resourceIndex !== grab.resourceIndex;
-                        if (!moved) return;
+                    validate(grab, target) {
+                        // Повернення на своє місце забороняти нема за що:
+                        // жест просто нічого не зробить.
+                        if (!changed(grab, target)) return true;
 
-                        if (grab.edge === null) commitMove(grab, target);
-                        else commitResize(grab, target);
+                        if (grab.edge === null) {
+                            const move = moveOf(grab, target);
+                            return move === null ? false : (options.canMove?.(move) ?? true);
+                        }
+
+                        const resize = resizeOf(grab, target);
+                        return resize === null ? false : (options.canResize?.(resize) ?? true);
+                    },
+
+                    commit(grab, target) {
+                        if (!changed(grab, target)) return;
+
+                        if (grab.edge === null) {
+                            const move = moveOf(grab, target);
+                            if (move !== null) options.onMove?.(move);
+                            return;
+                        }
+
+                        const resize = resizeOf(grab, target);
+                        if (resize !== null) options.onResize?.(resize);
                     },
                 },
                 ghost,

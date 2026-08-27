@@ -10,6 +10,7 @@
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
 import { makeGhost, trackPointer } from "./gesture";
+import type { Target } from "./gesture";
 import type { IsoDate, Plugin, PluginContext, Resource } from "../core/types";
 
 export interface DragCreate<R = unknown> {
@@ -23,6 +24,12 @@ export interface DragCreate<R = unknown> {
 
 export interface CreateOptions<R = unknown> {
     onCreate: (created: DragCreate<R>) => void;
+    /**
+     * Чи дозволено таке виділення. Питається на кожному русі, тож заборонений
+     * діапазон видно ще під час жесту. Класичне правило — не перетинати те,
+     * що вже лежить у рядку.
+     */
+    canCreate?: (created: DragCreate<R>) => boolean;
     /** Клас на привида — щоб застосунок оформив його по-своєму. */
     className?: string;
     /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
@@ -47,6 +54,25 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
             const overlay: HTMLElement = overlayEl;
 
             const ghost = makeGhost(overlay, options.className);
+
+            /**
+             * Що вийде з цього виділення. Одна функція на дозвіл і на
+             * результат: порахувати двома шляхами означало б рано чи пізно
+             * дозволити одне, а створити інше.
+             *
+             * Межі беруться прямо з осі, а не зсувом у днях, як у переїзді:
+             * виділення й народилось із колонок, обрізати його краєм діапазону
+             * нема чому.
+             */
+            function rangeOf(anchor: Anchor, target: Target): DragCreate<R> | null {
+                const layout = ctx.getLayout();
+                const resource = layout.rows[anchor.resourceIndex]?.resource;
+                const first = layout.slots[target.slotIndex];
+                const last = layout.slots[target.slotIndex + target.slotSpan - 1];
+                if (resource === undefined || first === undefined || last === undefined) return null;
+
+                return { resource, start: first.start, end: last.end, days: target.slotSpan };
+            }
 
             return trackPointer<Anchor>(
                 {
@@ -77,24 +103,14 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                         return { slotIndex: from, slotSpan: to - from + 1, resourceIndex: anchor.resourceIndex };
                     },
 
+                    validate(anchor, target) {
+                        const created = rangeOf(anchor, target);
+                        return created === null ? false : (options.canCreate?.(created) ?? true);
+                    },
+
                     commit(anchor, target) {
-                        const layout = ctx.getLayout();
-                        const resource = layout.rows[anchor.resourceIndex]?.resource;
-                        if (resource === undefined) return;
-
-                        // Межі беруться прямо з осі, а не зсувом у днях:
-                        // виділення й народилось із колонок, обрізати його
-                        // краєм діапазону нема чому.
-                        const first = layout.slots[target.slotIndex];
-                        const last = layout.slots[target.slotIndex + target.slotSpan - 1];
-                        if (first === undefined || last === undefined) return;
-
-                        options.onCreate({
-                            resource,
-                            start: first.start,
-                            end: last.end,
-                            days: target.slotSpan,
-                        });
+                        const created = rangeOf(anchor, target);
+                        if (created !== null) options.onCreate(created);
                     },
                 },
                 ghost,

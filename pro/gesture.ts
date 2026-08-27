@@ -17,7 +17,7 @@ export interface Target {
 }
 
 export interface Ghost {
-    show(target: Target, geometry: Geometry): void;
+    show(target: Target, geometry: Geometry, valid: boolean): void;
     remove(): void;
 }
 
@@ -29,7 +29,7 @@ export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
     let element: HTMLElement | null = null;
 
     return {
-        show(target, geometry) {
+        show(target, geometry, valid) {
             if (element === null) {
                 element = document.createElement("div");
                 element.className = ["rt__ghost", className].filter(Boolean).join(" ");
@@ -44,6 +44,12 @@ export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
             element.style.width = `${target.slotSpan * geometry.slotWidth}px`;
             element.style.top = `${top}px`;
             element.style.height = `${geometry.rowOffsets[target.resourceIndex + 1] - top}px`;
+
+            // Заборонену ціль видно одразу, а не після відпускання: інакше
+            // жест мовчки нічого не робить, і це читається як поламане.
+            element.classList.toggle("rt__ghost--invalid", !valid);
+            element.style.borderColor = valid ? "" : "#d64545";
+            element.style.background = valid ? "rgba(127,127,127,0.12)" : "rgba(214,69,69,0.12)";
         },
         remove() {
             element?.remove();
@@ -63,7 +69,13 @@ export interface PointerGesture<S> {
     press(event: MouseEvent): S | null;
     /** Куди веде вказівник зараз; null — лишити попереднє. */
     track(state: S, event: MouseEvent): Target | null;
-    /** Відпустили. Викликається лише тоді, коли жест справді почався. */
+    /**
+     * Чи можна тут відпустити. Заборонена ціль показується перекресленою, але
+     * не застосовується: користувач має бачити межу правила під час жесту, а
+     * не дізнаватись про неї з мовчання.
+     */
+    validate?(state: S, target: Target): boolean;
+    /** Відпустили. Викликається лише для дозволеної цілі. */
     commit(state: S, target: Target): void;
 }
 
@@ -115,8 +127,11 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
         const next = gesture.track(state, event);
         if (next === null) return;
 
-        target = next;
-        ghost.show(next, geometry());
+        // Заборонену ціль показуємо, але не запам'ятовуємо: відпускання на ній
+        // не має застосуватись, а повернення на дозволену — має спрацювати.
+        const valid = gesture.validate?.(state, next) ?? true;
+        target = valid ? next : null;
+        ghost.show(next, geometry(), valid);
     }
 
     function onPointerUp() {
