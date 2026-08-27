@@ -215,7 +215,13 @@ const props = withDefaults(
 
 const pageScroll = computed(() => props.scroll === "page");
 const modeClass = computed(() => (pageScroll.value ? "rt--page-scroll" : "rt--container-scroll"));
-const headerStyle = computed(() => (pageScroll.value ? { top: `${props.stickyOffset}px` } : undefined));
+/**
+ * Відступ під чужу шапку теж кратний пристроєвому пікселю: коли наша шапка
+ * прилипає, саме він задає, де опиниться її нижня межа.
+ */
+const headerStyle = computed(() =>
+    pageScroll.value ? { top: `${snapToDevice(props.stickyOffset, Math.ceil)}px` } : undefined,
+);
 
 /**
  * У payload іде і подія, і `target` — елемент, до якого можна прив'язати попап
@@ -286,37 +292,100 @@ const viewportHeight = ref(0);
 const totalWidth = ref(0);
 
 /**
+ * Пристроєвих пікселів на CSS-піксель. На 125% масштабу це 1.25, і саме там
+ * ламається «ціла ширина = чіткі лінії»: 31 CSS-піксель — це 38.75
+ * пристроєвих, тож кожна наступна лінія лягає на чверть пікселя далі, а
+ * кожна четверта — рівно на межу. Три лінії розмиті, четверта різка, і око
+ * читає це як нерівну товщину.
+ */
+const pixelRatio = ref(1);
+
+/** Розмір, кратний пристроєвому пікселю: усі лінії лягають однаково. */
+function snapToDevice(size: number, round: (value: number) => number): number {
+    const snapped = round(Math.round(size * pixelRatio.value * 1e4) / 1e4) / pixelRatio.value;
+    // Дробове ділення дає хвіст у 15-му знаку; у CSS він ні до чого
+    return Math.round(snapped * 1e4) / 1e4;
+}
+
+/** Скільки бракує розміру, щоб його край ліг рівно на пристроєвий піксель. */
+function deviceDrift(size: number): number {
+    return snapToDevice(size, Math.ceil) - size;
+}
+
+/**
  * Задана ширина слота — мінімальна. Якщо в контейнері лишається місце,
  * колонки розтягуються на нього: порожня смуга праворуч від сітки виглядає
  * як недомальований компонент, а не як свідоме рішення.
  *
- * Ширина завжди ціла. На дробовій кожна лінія сітки лягає між пікселями,
- * браузер її згладжує, і сусідні лінії виходять різної товщини — саме те,
- * чим таблична розмітка виглядає чіткішою за градієнт.
+ * Ширина кратна пристроєвому пікселю, а не цілому CSS-пікселю: вирівнює
+ * лінії саме перший, а другий збігається з ним лише на 100% масштабу.
+ * Розтяжка округлюється вниз, щоб влізти, мінімум — угору, щоб не впасти
+ * нижче заданого.
  */
 const slotWidth = computed(() => {
     const count = layout.value.slots.length;
     if (!props.stretch || totalWidth.value <= 0 || count === 0) return props.slotWidth;
 
-    return Math.max(props.slotWidth, Math.floor((totalWidth.value - props.resourceWidth) / count));
+    return Math.max(
+        snapToDevice(props.slotWidth, Math.ceil),
+        snapToDevice((totalWidth.value - props.resourceWidth) / count, Math.floor),
+    );
 });
 
 /**
- * Залишок від цілочисельного ділення забирає панель ресурсів: кілька зайвих
- * пікселів у ній непомітні, а нерівні лінії в сітці помітні одразу.
+ * Залишок від ділення забирає панель ресурсів: кілька зайвих пікселів у ній
+ * непомітні, а нерівні лінії в сітці помітні одразу.
+ *
+ * Разом із залишком панель забирає й дробовий зсув. Кратної ширини дня мало:
+ * вона робить лінії однаковими між собою, але всі однаково розмитими, якщо
+ * сама сітка починається з півпікселя — а звідки їй починатись, вирішує
+ * компонування застосунку. Дешевше зсунути панель на цю дробу, ніж лишити
+ * весь місяць висіти між пристроєвими пікселями.
  */
 const paneWidth = computed(() => {
     const count = layout.value.slots.length;
     if (!props.stretch || totalWidth.value <= 0 || count === 0) return props.resourceWidth;
 
-    return Math.max(props.resourceWidth, totalWidth.value - slotWidth.value * count);
+    // Залишок округлюємо вниз, щоб влізти; мінімум — угору, щоб не впасти
+    // нижче заданого. Обидва краї вирівняні, тож дробі нема де взятись навіть
+    // тоді, коли панель уперлася в мінімум і забирати вже нічого.
+    const rest = alignPane(totalWidth.value - slotWidth.value * count, Math.floor);
+
+    return Math.max(alignPane(props.resourceWidth, Math.ceil), rest);
 });
+
+/**
+ * Найближча ширина панелі, за якої сітка починається рівно на пристроєвому
+ * пікселі. Вирівнюється саме панель: вона одна, а колонок тридцять одна.
+ */
+function alignPane(width: number, round: (value: number) => number): number {
+    const offset = Math.round((contentOrigin.value + width) * pixelRatio.value * 1e4) / 1e4;
+    const aligned = width + (round(offset) - offset) / pixelRatio.value;
+
+    return Math.round(aligned * 1e4) / 1e4;
+}
 
 const availableWidth = computed(() => Math.max(0, totalWidth.value - paneWidth.value));
 
+/**
+ * Ліва межа сітки без нашої панелі: усе, що поставив застосунок — відступи
+ * сторінки, бічне меню, проміжок між картками. Панель вирівнюється саме від
+ * неї, і саме тому тут її ширини немає: інакше вимірювання ганялося б за
+ * власним результатом.
+ */
+const contentOrigin = ref(0);
+
+/**
+ * Висоти теж кратні пристроєвому пікселю — з тієї ж причини, що й ширини:
+ * інакше роздільник кожного наступного рядка лягав би на іншу частку пікселя.
+ * Округлення вгору, щоб бари не притискались до межі.
+ */
 const rowHeights = computed(() =>
     layout.value.rows.map((row) =>
-        Math.max(props.minRowHeight, row.laneCount * props.barHeight + (row.laneCount + 1) * props.barGap),
+        snapToDevice(
+            Math.max(props.minRowHeight, row.laneCount * props.barHeight + (row.laneCount + 1) * props.barGap),
+            Math.ceil,
+        ),
     ),
 );
 
@@ -360,6 +429,12 @@ function onScroll() {
     if (headerTrackRef.value !== null) {
         headerTrackRef.value.style.transform = `translateX(${-offset}px)`;
     }
+    // Те саме обрізання, що шапці дає її вікно: тіло їде під панель ресурсів,
+    // а між панелями лишається проміжок, крізь який інакше видно лінії сітки —
+    // календар ніби вилазить із-під власної картки.
+    if (bodyRef.value !== null) {
+        bodyRef.value.style.clipPath = offset > 0 ? `inset(0 0 0 ${offset}px)` : "";
+    }
     if (scrollbarRef.value !== null && scrollbarRef.value.scrollLeft !== offset) {
         scrollbarRef.value.scrollLeft = offset;
     }
@@ -399,45 +474,89 @@ const headerHeight = ref(0);
  */
 const contentWidth = ref(0);
 
+/**
+ * Два дробові відступи, якими вертикаль сідає на пристроєві пікселі: перший
+ * зсуває весь компонент, другий добирає висоту шапки. Обидва менші за піксель
+ * і на око не читаються, зате нижня межа шапки й усі роздільники рядків після
+ * них лягають рівно, а не між пікселями.
+ */
+const lead = ref(0);
+const headerPad = ref(0);
+
 function syncViewport() {
     const scroller = scrollerRef.value;
     if (scroller === null) return;
 
-    headerHeight.value = headerTrackRef.value?.offsetHeight ?? 0;
     contentWidth.value = scroller.scrollWidth;
-    totalWidth.value = measureTotalWidth();
+    // Масштаб сторінки змінюється разом із її розміром, тож читається тут же
+    pixelRatio.value = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    measureVertical();
+    totalWidth.value = measureGeometry();
 
     if (pageScroll.value) syncPageViewport();
     else viewportHeight.value = scroller.clientHeight;
 }
 
 /**
- * Скільки місця дістається панелі ресурсів разом із колонками. Рахувати від
- * props не можна: застосунок додає проміжок між панелями, рамки й відступи,
- * і сітка вилізе рівно на цю різницю. Тому міряємо реальні краї.
+ * Вертикальні відступи вирівнювання. Власний внесок віднімається назад, і то
+ * не з наших змінних, а з розмітки: коли обидва вимірювання йдуть з DOM, їм
+ * нема як розійтися, хоч би коли спостерігач розміру нас розбудив.
+ */
+function measureVertical() {
+    const root = rootRef.value;
+    const header = headerTrackRef.value;
+    if (root === null || header === null) return;
+
+    // Верх компонента в координатах документа: на екранні його переводить
+    // прокрутка, а вона в браузері й так кратна пристроєвому пікселю.
+    const top = root.getBoundingClientRect().top + window.scrollY;
+    lead.value = deviceDrift(top);
+
+    const applied = parseFloat(getComputedStyle(header).paddingBottom) || 0;
+    const natural = header.getBoundingClientRect().height - applied;
+    headerPad.value = deviceDrift(natural);
+    headerHeight.value = natural + headerPad.value;
+}
+
+/**
+ * Скільки місця дістається панелі ресурсів разом із колонками — і заразом
+ * звідки починається сітка. Рахувати від props не можна: застосунок додає
+ * проміжок між панелями, рамки й відступи, і сітка вилізе рівно на цю різницю.
+ * Тому міряємо реальні краї.
  *
- * Зворотного зв'язку немає: ліва межа панелі й проміжок між панелями не
+ * Зворотного зв'язку немає: ліва межа сітки й проміжок між панелями не
  * залежать від того, якої ширини ми зробимо панель і колонки.
  */
-function measureTotalWidth(): number {
+function measureGeometry(): number {
     const root = scrollerRef.value;
+    const grid = gridRef.value;
     const body = bodyRef.value;
     if (root === null) return 0;
 
     // jsdom і прихований контейнер не міряються — лишаємо оцінку за props
-    if (body === null || body.offsetLeft === 0) return root.clientWidth;
+    if (grid === null || body === null || body.offsetLeft === 0) return root.clientWidth;
 
-    // Тільки величини компонування: прямокутник панелі ресурсів бреше, бо вона
-    // липка й при горизонтальній прокрутці їде вправо разом із вікном.
-    // Проміжок беремо з розмітки, а не відніманням власної обчисленої ширини —
-    // інакше вимірювання залежало б від свого ж результату.
-    const gap = body.offsetLeft - (resourcesRef.value?.offsetWidth ?? props.resourceWidth);
-    const borders = body.offsetWidth - body.clientWidth;
+    // Усе дробом, а не через offsetWidth: округлення до цілого гуляє на піксель,
+    // а піксель тут коштує цілу сходинку ширини дня — колонки б смикались.
+    const styles = getComputedStyle(body);
+    const borders = (parseFloat(styles.borderLeftWidth) || 0) + (parseFloat(styles.borderRightWidth) || 0);
+
+    // Ліворуч від сітки лежить панель, її рамки й проміжок. Власну ширину
+    // панелі віднімаємо назад, і лишається тільки чуже — те, чим розпоряджається
+    // застосунок. Від наших колонок ця величина не залежить, тож кола немає.
+    // Прямокутники беремо в сітки й тіла: панель липка й при горизонтальній
+    // прокрутці їде вправо разом із вікном, тобто про своє місце бреше.
+    const bodyLeft = body.getBoundingClientRect().left;
+    const chrome = bodyLeft - grid.getBoundingClientRect().left - paneWidth.value;
+
+    // Прокрутку додаємо назад: рахувати треба від нескрученого стану, інакше
+    // колонки перераховувались би на кожен горизонтальний рух.
+    contentOrigin.value = bodyLeft + root.scrollLeft - paneWidth.value;
 
     // Цілий піксель запасу: clientWidth округлений, і на дробових масштабах
     // (125%, 150%) рамка правого краю інакше лягає рівно на межу прокрутки
     // й зникає. Зайвий піксель фону праворуч непомітний, зникла рамка — ні.
-    return Math.floor(root.clientWidth - gap - borders) - 1;
+    return root.clientWidth - chrome - borders - 1;
 }
 
 /**
@@ -480,6 +599,11 @@ const rootStyle = computed(() => ({
     "--rt-slot-width": `${slotWidth.value}px`,
     "--rt-resource-width": `${paneWidth.value}px`,
     "--rt-slot-count": String(layout.value.slots.length),
+    // Внутрішня кухня вирівнювання, а не токени: значення тут виміряні, і
+    // задавати їх ззовні нема сенсу — застосунок не знає ні масштабу, ні
+    // того, з якої частки пікселя почалась його ж сторінка.
+    "--rt-lead": `${lead.value}px`,
+    "--rt-header-pad": `${headerPad.value}px`,
 }));
 
 /** Слоти → пікселі. Єдине місце, де відбувається це перетворення. */
@@ -670,6 +794,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
     position: relative;
     display: flex;
     flex-direction: column;
+    /* Частка пікселя, якою компонент сідає на пристроєву сітку */
+    padding-top: var(--rt-lead, 0px);
     background: var(--rt-surface);
     color: var(--rt-text);
 }
@@ -716,6 +842,19 @@ defineExpose({ layout, syncViewport, scrollToDate });
 }
 
 /**
+ * У режимі сторінки справжня смуга скролера лежить у кінці таблиці: догорнувши
+ * донизу, побачиш дві поспіль — її і прилиплу. Ховаємо справжню; прокрутка
+ * колесом, тачпадом і клавіатурою від цього не зникає, а видима лишається одна.
+ */
+.rt--page-scroll .rt__scroller {
+    scrollbar-width: none;
+}
+
+.rt--page-scroll .rt__scroller::-webkit-scrollbar {
+    display: none;
+}
+
+/**
  * Смуга прокрутки, прилипла до низу вікна: у режимі сторінки справжня лежить
  * у кінці таблиці, тобто поза екраном, поки не догорнеш до самого низу.
  */
@@ -738,6 +877,10 @@ defineExpose({ layout, syncViewport, scrollToDate });
     column-gap: var(--rt-pane-gap);
     width: max-content;
     min-width: 100%;
+    /* Піксель у хвості вмісту: догорнувши до кінця, рамка правого краю інакше
+       лягає рівно на межу обрізання скролера, і браузер її просто не малює.
+       Ширину це не з'їдає — рівно на цей піксель вимірювання лишає запас. */
+    padding-right: 1px;
 }
 
 .rt__corner,
@@ -761,6 +904,9 @@ defineExpose({ layout, syncViewport, scrollToDate });
     grid-auto-flow: column;
     grid-auto-columns: var(--rt-slot-width);
     width: max-content;
+    /* Добір висоти до цілого пристроєвого пікселя: інакше нижня межа шапки
+       ділиться між двома рядами пікселів і на світлій лінії просто зникає. */
+    padding-bottom: var(--rt-header-pad, 0px);
     background-image: var(--rt-grid-lines);
     background-size: calc(100% - 2px) 100%;
     background-repeat: no-repeat;
