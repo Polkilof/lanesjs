@@ -1,15 +1,32 @@
 /**
- * Привид перетягування — найдешевша перевірка того, чи витримує плагінний API
- * редагування. Він нічого не змінює: ловить вказівник, рахує ціль і малює
- * прямокутник у шарі накладок. Якщо цього досить без жодної правки ядра —
- * значить, на цих гачках можна повісити й справжнє перетягування.
+ * Перетягування барів між датами й ресурсами — платна поведінка на
+ * безкоштовних гачках. Плагін нічого не мутує: він рахує, куди елемент
+ * переїхав, і віддає це застосунку. Дані лишаються там, де й були — компонент
+ * керований, і плагін не має права заводити власне сховище (рішення 04).
  *
- * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи. Перевірка та сама,
- * що й для доменних слів: грепом на кожному коміті (див. README).
+ * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
-import type { PlacedItem, Plugin, PluginContext } from "../core/types";
+import { addDays, diffDays, toEpoch, toIso } from "../core/date";
+import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource, Row } from "../core/types";
 
-export interface DragPreviewOptions {
+export interface DragMove<R = unknown, I = unknown> {
+    item: Item<I>;
+    /** Ресурс, з якого забрали, і ресурс, у який поклали. */
+    from: Resource<R>;
+    to: Resource<R>;
+    /** Нові межі елемента; `end` ексклюзивний, як і всюди в контракті. */
+    start: IsoDate;
+    end: IsoDate;
+    /** Зсув у днях; від'ємний — уліво. */
+    days: number;
+}
+
+export interface DragOptions<R = unknown, I = unknown> {
+    /**
+     * Викликається на відпусканні, якщо елемент справді переїхав. Прийняти чи
+     * відхилити — справа застосунку: він володіє даними, ми лише рахуємо.
+     */
+    onMove?: (move: DragMove<R, I>) => void;
     /** Клас на привида — щоб застосунок оформив його по-своєму. */
     className?: string;
     /**
@@ -19,19 +36,22 @@ export interface DragPreviewOptions {
     threshold?: number;
 }
 
-interface Dragged<I> {
+interface Dragged<R, I> {
     placed: PlacedItem<I>;
+    from: Resource<R>;
     /** За скільки днів від початку бара його схопили. */
     grabOffset: number;
     origin: { x: number; y: number };
     active: boolean;
+    /** Остання ціль, яку показав привид; вона ж поїде в onMove. */
+    target: { slotIndex: number; resourceIndex: number } | null;
 }
 
-export function dragPreview<R = unknown, I = unknown>(options: DragPreviewOptions = {}): Plugin<R, I> {
+export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}): Plugin<R, I> {
     const threshold = options.threshold ?? 4;
 
     return {
-        name: "drag-preview",
+        name: "drag",
         setup(ctx: PluginContext<R, I>) {
             const rootEl = ctx.getRoot();
             const overlayEl = ctx.getOverlay();
@@ -43,13 +63,13 @@ export function dragPreview<R = unknown, I = unknown>(options: DragPreviewOption
             const root: HTMLElement = rootEl;
             const overlay: HTMLElement = overlayEl;
 
-            let dragged: Dragged<I> | null = null;
+            let dragged: Dragged<R, I> | null = null;
             let ghost: HTMLElement | null = null;
 
-            function findPlaced(id: string): PlacedItem<I> | undefined {
+            function findBar(id: string): { placed: PlacedItem<I>; row: Row<R, I> } | undefined {
                 for (const row of ctx.getLayout().rows) {
                     const placed = row.bars.find((candidate) => candidate.item.id === id);
-                    if (placed !== undefined) return placed;
+                    if (placed !== undefined) return { placed, row };
                 }
                 return undefined;
             }
@@ -70,11 +90,10 @@ export function dragPreview<R = unknown, I = unknown>(options: DragPreviewOption
                 }
 
                 const top = rowOffsets[resourceIndex];
-                const height = rowOffsets[resourceIndex + 1] - top;
                 ghost.style.left = `${slotIndex * slotWidth}px`;
                 ghost.style.width = `${dragged.placed.slotSpan * slotWidth}px`;
                 ghost.style.top = `${top}px`;
-                ghost.style.height = `${height}px`;
+                ghost.style.height = `${rowOffsets[resourceIndex + 1] - top}px`;
             }
 
             function stop() {
@@ -91,15 +110,17 @@ export function dragPreview<R = unknown, I = unknown>(options: DragPreviewOption
                 const id = bar?.dataset.item;
                 if (id === undefined) return;
 
-                const placed = findPlaced(id);
+                const found = findBar(id);
                 const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
-                if (placed === undefined || hit === null) return;
+                if (found === undefined || hit === null) return;
 
                 dragged = {
-                    placed,
-                    grabOffset: hit.slot.index - placed.slotIndex,
+                    placed: found.placed,
+                    from: found.row.resource,
+                    grabOffset: hit.slot.index - found.placed.slotIndex,
                     origin: { x: event.clientX, y: event.clientY },
                     active: false,
+                    target: null,
                 };
             }
 
@@ -123,13 +144,46 @@ export function dragPreview<R = unknown, I = unknown>(options: DragPreviewOption
                 const span = dragged.placed.slotSpan;
                 // Ціль тримається в межах осі: бар, вивезений за край, не має
                 // ставати коротшим — він просто впирається.
-                const target = Math.min(Math.max(hit.slot.index - dragged.grabOffset, 0), slots - span);
+                const slotIndex = Math.min(Math.max(hit.slot.index - dragged.grabOffset, 0), slots - span);
 
-                showGhost(target, hit.resourceIndex);
+                dragged.target = { slotIndex, resourceIndex: hit.resourceIndex };
+                showGhost(slotIndex, hit.resourceIndex);
+            }
+
+            /** Що саме переїхало, або null, якщо нічого не змінилось. */
+            function pendingMove(): DragMove<R, I> | null {
+                if (dragged === null || dragged.target === null || options.onMove === undefined) return null;
+
+                const layout = ctx.getLayout();
+                const to = layout.rows[dragged.target.resourceIndex]?.resource;
+                if (to === undefined) return null;
+
+                const sameSlot = dragged.target.slotIndex === dragged.placed.slotIndex;
+                if (sameSlot && to.id === dragged.from.id) return null;
+
+                // Рахуємо зсув у днях, а не нові межі з осі: бар міг бути
+                // обрізаний краєм діапазону, і тоді видимий початок — не
+                // початок елемента. Зсув же однаковий для обох країв.
+                const item = dragged.placed.item;
+                const days = diffDays(
+                    toEpoch(layout.slots[dragged.placed.slotIndex].start),
+                    toEpoch(layout.slots[dragged.target.slotIndex].start),
+                );
+
+                return {
+                    item,
+                    from: dragged.from,
+                    to,
+                    start: toIso(addDays(toEpoch(item.start), days)),
+                    end: toIso(addDays(toEpoch(item.end), days)),
+                    days,
+                };
             }
 
             function onPointerUp() {
+                const move = pendingMove();
                 stop();
+                if (move !== null) options.onMove?.(move);
             }
 
             root.addEventListener("pointerdown", onPointerDown);

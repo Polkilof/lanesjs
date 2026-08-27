@@ -27,15 +27,15 @@
             </label>
 
             <label class="demo__control">
-                <input v-model="preview" type="checkbox" />
-                Привид перетягування
+                <input v-model="draggable" type="checkbox" />
+                Перетягування (pro)
             </label>
 
             <span class="demo__stat">рядків: {{ rooms.length }} · броней: {{ bookings.length }}</span>
         </header>
 
         <Timeline
-            :key="preview ? 'with-preview' : 'plain'"
+            :key="draggable ? 'draggable' : 'plain'"
             class="demo__timeline"
             :resources="rooms"
             :items="bookings"
@@ -85,7 +85,8 @@
 import { computed, ref } from "vue";
 import Timeline from "../vue/Timeline.vue";
 import { useTimelineRange } from "../vue/useTimelineRange";
-import { dragPreview } from "../pro/dragPreview";
+import { drag } from "../pro/drag";
+import type { DragMove } from "../pro/drag";
 import type { Item, PlacedItem, Plugin, Resource } from "../core/types";
 
 interface Room {
@@ -115,8 +116,25 @@ const { range, title, prev, next, today } = useTimelineRange({ date: "2026-03-01
  * Список перебудовується разом із ключем компонента: плагіни читаються один
  * раз на монтуванні, тож перемикач має піднімати таймлайн наново.
  */
-const preview = ref(false);
-const plugins = computed<Plugin<Room, Booking>[]>(() => (preview.value ? [dragPreview<Room, Booking>()] : []));
+const draggable = ref(false);
+const plugins = computed<Plugin<Room, Booking>[]>(() =>
+    draggable.value ? [drag<Room, Booking>({ onMove: applyMove })] : [],
+);
+
+/**
+ * Переїзди, які застосунок прийняв. Плагін нічого не мутує — він лише каже,
+ * куди елемент переїхав, а дані лишаються тут. Тому й накладка окремим шаром
+ * поверх згенерованих броней, а не правка на місці.
+ */
+const moves = ref(new Map<string, { resourceId: string; start: string; end: string }>());
+
+function applyMove(move: DragMove<Room, Booking>) {
+    const next = new Map(moves.value);
+    next.set(move.item.id, { resourceId: move.to.id, start: move.start, end: move.end });
+    moves.value = next;
+
+    lastAction.value = `переїзд ${move.item.meta?.guest}: ${move.to.title}, ${move.start} (${move.days} дн.)`;
+}
 const highlightedDay = "2026-03-12";
 
 const rooms = computed<Resource<Room>[]>(() =>
@@ -136,11 +154,14 @@ const bookings = computed<Item<Booking>[]>(() => {
             const day = 1 + ((roomIndex * 7 + slot * 11) % 26);
             const length = 1 + ((roomIndex + slot) % 4);
 
+            const id = `${room.id}-${slot}`;
+            const moved = moves.value.get(id);
+
             result.push({
-                id: `${room.id}-${slot}`,
-                resourceId: room.id,
-                start: iso(day),
-                end: iso(day + length),
+                id,
+                resourceId: moved?.resourceId ?? room.id,
+                start: moved?.start ?? iso(day),
+                end: moved?.end ?? iso(day + length),
                 meta: {
                     guest: GUESTS[(roomIndex + slot) % GUESTS.length],
                     status: STATUSES[(roomIndex + slot) % STATUSES.length],
