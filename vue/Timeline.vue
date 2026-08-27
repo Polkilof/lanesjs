@@ -498,6 +498,9 @@ defineExpose({ layout, syncViewport, scrollToDate });
         var(--rt-grid-line) calc(var(--rt-slot-width) - 1px),
         var(--rt-grid-line) var(--rt-slot-width)
     );
+    /* Тло під липкими панелями. Потрібне, лише якщо застосунок заокруглює їх:
+       у прозорі дуги кутів інакше видно рядки, що проїжджають під ними. */
+    --rt-behind-bg: transparent;
     --rt-radius: 4px;
     --rt-surface: #ffffff;
     --rt-header-bg: #ffffff;
@@ -576,6 +579,22 @@ defineExpose({ layout, syncViewport, scrollToDate });
     left: 0;
     z-index: 3;
     border-right: 1px solid var(--rt-grid-line);
+}
+
+/**
+ * Підкладка під липкими панелями: закриває те, що проїжджає під ними, у
+ * місцях, куди не дістає їхнє власне тло — тобто в дугах заокруглень.
+ * Лежить усередині їхнього стекінг-контексту, тож перекриває вміст, який
+ * скролиться, але не саму панель.
+ */
+.rt__corner::before,
+.rt__axis::before,
+.rt__resources::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--rt-behind-bg);
 }
 
 .rt__axis {

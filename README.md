@@ -69,6 +69,7 @@ grep -rni 'employee\|absence\|holiday\|hrm' --include='*.ts' --include='*.vue' s
 | `--rt-weekend-bg` | колонки вихідних |
 | `--rt-bar-bg` / `--rt-bar-text` | бар події |
 | `--rt-radius` | заокруглення бара |
+| `--rt-behind-bg` | тло під липкими панелями; потрібне, лише якщо їх заокруглити |
 
 Три рівні теми, у порядку зростання пріоритету: світла база → системна темна
 (`prefers-color-scheme`, якщо не задано `theme="light"`) → явний `theme="dark"`.
