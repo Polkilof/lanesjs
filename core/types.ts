@@ -190,3 +190,24 @@ export interface Plugin<R = unknown, I = unknown> {
     /** Повернена функція викликається при знищенні таймлайна. */
     setup(ctx: PluginContext<R, I>): void | (() => void);
 }
+
+/**
+ * Те, що застосунок дістає через `ref` на компонент.
+ *
+ * Оголошено тут, а не виведено з компонента, бо вивести його споживач не може:
+ * `Timeline` — узагальнений SFC, тобто функція, а не конструктор, і звичне
+ * `InstanceType<typeof Timeline>` на ньому не компілюється взагалі. Без
+ * названого типу лишалось би або тягнути `vue-component-type-helpers`, або
+ * переписувати цю форму в себе — обидва варіанти гірші за один експорт.
+ *
+ * `layout` тут — уже розгорнута розкладка, а не `ComputedRef`: рефи розгортає
+ * проксі, який Vue робить із `defineExpose`.
+ */
+export interface TimelineInstance<R = unknown, I = unknown> {
+    layout: Layout<R, I>;
+    /** Перевиміряти вікно — після власної зміни розмірів контейнера. */
+    syncViewport(): void;
+    scrollToDate(date: IsoDate, align?: "start" | "center"): void;
+    /** Намалювати всю таблицю, надрукувати й повернути віртуалізацію. */
+    print(): Promise<void>;
+}

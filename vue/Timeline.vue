@@ -157,7 +157,16 @@
  * геометрія бара досі не міряє DOM, віртуалізація читає лише scrollTop і
  * висоту вікна, тобто те, що інакше дізнатись неможливо.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    shallowRef,
+    watch,
+    type ComputedRef,
+} from "vue";
 import { buildLayout } from "../core/layout";
 import { rowAt, rowOffsets, visibleSlice } from "../core/virtual";
 import type {
@@ -174,6 +183,7 @@ import type {
     Slot,
     SlotStep,
     TimelineEvents,
+    TimelineInstance,
 } from "../core/types";
 
 const props = withDefaults(
@@ -1070,7 +1080,16 @@ async function print() {
     }
 }
 
-defineExpose({ layout, syncViewport, scrollToDate, print });
+/**
+ * `satisfies`, а не анотація: інакше зникло б виведення типів для тих, хто
+ * бере ref без нашого `TimelineInstance`. Розгорнутий `layout` у контракті й
+ * `ComputedRef` тут — те саме поле: рефи розгортає проксі, який робить Vue.
+ */
+defineExpose(
+    { layout, syncViewport, scrollToDate, print } satisfies {
+        layout: ComputedRef<Layout<R, I>>;
+    } & Omit<TimelineInstance<R, I>, "layout">,
+);
 </script>
 
 <style>
