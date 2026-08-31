@@ -482,7 +482,17 @@ const rowHeights = computed(() =>
 const offsets = computed(() => rowOffsets(rowHeights.value));
 const totalHeight = computed(() => offsets.value[offsets.value.length - 1] ?? 0);
 
-const slice = computed(() => visibleSlice(offsets.value, scrollTop.value, viewportHeight.value, props.overscan));
+/**
+ * На друк іде вся таблиця, а не вікно. Це єдине місце, де віртуалізація
+ * вимикається: на папері немає прокрутки, тож «видимі рядки» там означає всі.
+ */
+const printing = ref(false);
+
+const slice = computed(() =>
+    printing.value
+        ? { start: 0, end: layout.value.rows.length }
+        : visibleSlice(offsets.value, scrollTop.value, viewportHeight.value, props.overscan),
+);
 
 /**
  * Сигнал тим, хто малює в шарі накладок. Стежимо і за розкладкою, і за
@@ -1012,7 +1022,24 @@ onBeforeUnmount(() => {
     teardowns.length = 0;
 });
 
-defineExpose({ layout, syncViewport, scrollToDate });
+/**
+ * Надрукувати таблицю цілком. Ctrl+P друкує лише те, що на екрані, і це не
+ * недогляд: у розмітці справді лежать самі видимі рядки. Тому друк — це три
+ * кроки, і два перші має зробити компонент: намалювати все, дочекатися
+ * перемальовки й аж тоді кликати браузер.
+ */
+async function print() {
+    printing.value = true;
+    await nextTick();
+
+    try {
+        window.print();
+    } finally {
+        printing.value = false;
+    }
+}
+
+defineExpose({ layout, syncViewport, scrollToDate, print });
 </script>
 
 <style>
@@ -1252,11 +1279,21 @@ defineExpose({ layout, syncViewport, scrollToDate });
     box-sizing: border-box;
     padding: 0 12px;
     overflow: hidden;
+.rt__axis-weekday {
+    color: var(--rt-muted);
+    font-size: 11px;
+}
+
     border-bottom: 1px solid var(--rt-grid-line);
 }
 
 /**
  * Вертикальні лінії сітки — градієнт, а не DOM на клітинку (рішення 09):
+/* «Сьогодні» виділяється числом; день тижня під ним лишається другорядним. */
+.rt__axis-cell--today .rt__axis-weekday {
+    font-weight: 400;
+}
+
  * 300 ресурсів на місяць коштують 300 рядків, а не 9300 клітинок.
  */
 .rt__body {
@@ -1338,27 +1375,6 @@ defineExpose({ layout, syncViewport, scrollToDate });
     cursor: pointer;
 }
 
-/** Обрізаний край — прямий, щоб було видно, що подія триває далі. */
-.rt__bar--clipped-start {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-}
-
-.rt__bar--clipped-end {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-</style>
-.rt__axis-weekday {
-    color: var(--rt-muted);
-    font-size: 11px;
-}
-
-/* «Сьогодні» виділяється числом; день тижня під ним лишається другорядним. */
-.rt__axis-cell--today .rt__axis-weekday {
-    font-weight: 400;
-}
-
 /**
  * Обведення зовні бара, а не всередині: бар вузький, і рамка по внутрішньому
  * краю з'їла б підпис. `outline` місця не займає, тож сусіди не рухаються.
@@ -1370,3 +1386,52 @@ defineExpose({ layout, syncViewport, scrollToDate });
 }
 
 /**
+ * На папері немає ні теми, ні прокрутки. Світлі токени тут не милосердя до
+ * тонера: сіре по темно-сірому в друку зникає зовсім. Селектори тримають ту
+ * саму вагу, що й екранні, тож застосунок так само перевизначає їх без
+ * `!important` — просто у власному блоці `@media print`.
+ */
+@media print {
+    .rt {
+        --rt-surface: #ffffff;
+        --rt-header-bg: #ffffff;
+        --rt-text: #000000;
+        --rt-muted: #444444;
+        --rt-grid-line: #999999;
+        --rt-today-bg: transparent;
+        --rt-weekend-bg: #f0f0f0;
+    }
+
+    /* Смуга прокрутки на аркуші — це просто сіра лінія нізвідки. */
+    .rt .rt__scrollbar {
+        display: none;
+    }
+
+    .rt .rt__scroller,
+    .rt .rt__axis-viewport {
+        overflow: visible;
+    }
+
+    .rt .rt__row {
+        break-inside: avoid;
+    }
+
+    /* Інакше браузер друкує бари сірими, і графік стає нечитним. */
+    .rt .rt__bar,
+    .rt .rt__background {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+/** Обрізаний край — прямий, щоб було видно, що подія триває далі. */
+.rt__bar--clipped-start {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.rt__bar--clipped-end {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+</style>
