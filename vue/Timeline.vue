@@ -25,7 +25,13 @@
                         @click="onSlotLabelClick($event, slot)"
                     >
                         <slot name="slot-label" :slot-data="slot">
-                            {{ slot.date.getDate() }}
+                            <span v-if="props.step === 'week'" class="rt__axis-range">
+                                {{ rangeLabel(slot) }}
+                            </span>
+                            <template v-else>
+                                <span class="rt__axis-day">{{ slot.date.getDate() }}</span>
+                                <span class="rt__axis-weekday">{{ weekdayLabel(slot) }}</span>
+                            </template>
                         </slot>
                     </div>
                 </div>
@@ -176,6 +182,12 @@ const props = withDefaults(
          * Класи на колонку — свята, блекаути, межі спринтів. Слот із класом
          * отримує накладку на всю висоту нарівні з «сьогодні» й вихідними.
          */
+        /**
+         * Мова підписів осі. Файлів локалей ми не возимо: усе потрібне вже є
+         * в `Intl`, від нас — лише передати мову. Без неї береться мова
+         * браузера, а власна розмітка підпису — слот `slot-label`.
+         */
+        locale?: string;
         slotClass?: (slot: Slot) => string | string[] | undefined;
         /**
          * Розміри в пікселях; кольори й решта оформлення — через токени --rt-*.
@@ -244,6 +256,43 @@ const emit = defineEmits<{
     /** Фактичний діапазон осі — при тижневому кроці ширший за заданий у props. */
     "range-change": [range: DateRange];
 }>();
+/**
+ * Форматери створюються раз на мову, а не на слот: `Intl.DateTimeFormat`
+ * коштує дорого, а слотів на осі буває тисяча.
+ */
+const weekdayFormat = computed(() => new Intl.DateTimeFormat(props.locale, { weekday: "short" }));
+const dayMonthFormat = computed(() =>
+    new Intl.DateTimeFormat(props.locale, { day: "numeric", month: "short" }),
+);
+
+function weekdayLabel(slot: Slot): string {
+    return weekdayFormat.value.format(slot.date);
+}
+
+/**
+ * Проміжок від дати до дати: «12–18 бер». `formatRange` сам вирішує, як
+ * скоротити його цією мовою й коли розкрити межу місяця. Типи його ще не
+ * знають, а браузери вже вміють; де не вміють — дві дати через тире, що гірше
+ * лише на вигляд.
+ */
+function formatSpan(from: Date, to: Date): string {
+    const format = dayMonthFormat.value as Intl.DateTimeFormat & {
+        formatRange?: (from: Date, to: Date) => string;
+    };
+
+    return typeof format.formatRange === "function"
+        ? format.formatRange(from, to)
+        : `${format.format(from)} – ${format.format(to)}`;
+}
+
+/** Тиждень підписується проміжком, а не числом свого понеділка. */
+function rangeLabel(slot: Slot): string {
+    const last = new Date(`${slot.end}T00:00:00`);
+    last.setDate(last.getDate() - 1);
+
+    return formatSpan(slot.date, last);
+}
+
 
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
@@ -1127,3 +1176,13 @@ defineExpose({ layout, syncViewport, scrollToDate });
     border-bottom-right-radius: 0;
 }
 </style>
+.rt__axis-weekday {
+    color: var(--rt-muted);
+    font-size: 11px;
+}
+
+/* «Сьогодні» виділяється числом; день тижня під ним лишається другорядним. */
+.rt__axis-cell--today .rt__axis-weekday {
+    font-weight: 400;
+}
+
