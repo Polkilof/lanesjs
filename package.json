@@ -1,0 +1,46 @@
+{
+    "name": "lanes-timeline",
+    "version": "0.1.0",
+    "description": "Resource timeline for Vue 3: virtualized rows, day and week axis, plugin hooks.",
+    "type": "module",
+    "license": "UNLICENSED",
+    "private": false,
+    "sideEffects": [
+        "**/*.css"
+    ],
+    "files": [
+        "dist"
+    ],
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/types/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./pro": {
+            "types": "./dist/types/pro/index.d.ts",
+            "import": "./dist/pro.js"
+        },
+        "./style.css": "./dist/style.css",
+        "./package.json": "./package.json"
+    },
+    "peerDependencies": {
+        "vue": "^3.4.0"
+    },
+    "keywords": [
+        "vue",
+        "vue3",
+        "timeline",
+        "gantt",
+        "resource-timeline",
+        "scheduler"
+    ],
+    "engines": {
+        "node": ">=20"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}
