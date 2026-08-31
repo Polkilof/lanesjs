@@ -17,6 +17,9 @@ import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource } from 
 
 export type DragEdge = "start" | "end";
 
+/** Ширина зони краю під палець; для миші вистачає значно вужчої. */
+const TOUCH_EDGE = 12;
+
 export interface DragMove<R = unknown, I = unknown> {
     item: Item<I>;
     /** Ресурс, з якого забрали, і ресурс, у який поклали. */
@@ -58,6 +61,8 @@ export interface DragOptions<R = unknown, I = unknown> {
     className?: string;
     /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
     threshold?: number;
+    /** Скільки тримати палець, щоб жест почався на дотик; типово 400 мс. */
+    longPress?: number;
     /** Ширина зони захвату краю. */
     edgeSize?: number;
 }
@@ -110,12 +115,16 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
              * Край під курсором. Зона не більша за третину бара: на дні в 30
              * пікселів дві шестипіксельні смуги ще лишають середину, з якої
              * бар можна взяти цілком.
+             *
+             * Пальцю шість пікселів не дати: він накриває десяток, і в край
+             * потрапляв би навмання — то розтягнув, то переїхав. Тому на дотик
+             * зона ширша; третина лишається стелею, тож середина є завжди.
              */
-            function edgeAt(bar: HTMLElement, x: number): DragEdge | null {
+            function edgeAt(bar: HTMLElement, x: number, touch = false): DragEdge | null {
                 if (options.onResize === undefined) return null;
 
                 const rect = bar.getBoundingClientRect();
-                const zone = Math.min(edgeSize, rect.width / 3);
+                const zone = Math.min(touch ? Math.max(edgeSize, TOUCH_EDGE) : edgeSize, rect.width / 3);
                 if (x - rect.left <= zone) return "start";
                 if (rect.right - x <= zone) return "end";
                 return null;
@@ -215,6 +224,7 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 {
                     root,
                     threshold: options.threshold ?? 4,
+                    longPress: options.longPress,
 
                     press(event) {
                         const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
@@ -225,7 +235,7 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
                         if (grab === undefined || hit === null) return null;
 
-                        const edge = edgeAt(bar, event.clientX);
+                        const edge = edgeAt(bar, event.clientX, event.pointerType === "touch");
                         // Жест без обробника не починається: тягнути бар, який
                         // нікуди не поїде, гірше, ніж не тягнути його зовсім.
                         if (edge === null && options.onMove === undefined) return null;

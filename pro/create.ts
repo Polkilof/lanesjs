@@ -34,6 +34,8 @@ export interface CreateOptions<R = unknown> {
     className?: string;
     /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
     threshold?: number;
+    /** Скільки тримати палець, щоб жест почався на дотик; типово 400 мс. */
+    longPress?: number;
 }
 
 /** Звідки почали тягнути. Рядок фіксується на старті й далі не змінюється. */
@@ -78,6 +80,7 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                 {
                     root,
                     threshold: options.threshold ?? 4,
+                    longPress: options.longPress,
 
                     press(event) {
                         // По бару створювати не можна: там уже щось лежить, і
