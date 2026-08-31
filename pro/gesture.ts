@@ -18,42 +18,72 @@ export interface Target {
 
 export interface Ghost {
     show(target: Target, geometry: Geometry, valid: boolean): void;
+    /**
+     * Приміряти привида до бара, який узяли: він стане тієї ж висоти й на тому
+     * самому місці в рядку, а сам бар пригасне — але аж тоді, коли жест
+     * справді почнеться.
+     */
+    fit(bar: HTMLElement): void;
     remove(): void;
 }
 
 /**
- * Привид у шарі накладок. Базовий вигляд інлайном: він має бути видимий і
- * тоді, коли застосунок про нього ще нічого не знає.
+ * Привид у шарі накладок. Інлайном лишається тільки те, без чого він опиниться
+ * не там: позиція й прозорість для вказівника. Вигляд — у таблиці стилів
+ * компонента, під токенами --rt-ghost-*: інлайн б'є будь-який селектор, тож
+ * поки колір стояв тут, застосунок не міг перефарбувати привида взагалі, і
+ * обіцяний плагінами className лишався наполовину порожньою обіцянкою.
  */
 export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
     let element: HTMLElement | null = null;
+    let source: HTMLElement | null = null;
+    let box: { top: number; height: number } | null = null;
 
     return {
+        fit(bar) {
+            source = bar;
+            box = { top: bar.offsetTop, height: bar.offsetHeight };
+        },
+
         show(target, geometry, valid) {
             if (element === null) {
                 element = document.createElement("div");
                 element.className = ["rt__ghost", className].filter(Boolean).join(" ");
-                element.style.cssText =
-                    "position:absolute;border:1px dashed currentColor;border-radius:var(--rt-radius);" +
-                    "background:rgba(127,127,127,0.12);pointer-events:none";
+                element.style.cssText = "position:absolute;pointer-events:none";
                 overlay.appendChild(element);
+
+                // Бар гасне тут, а не в fit: приміряються на натисканні, а
+                // жест починається порогом руху або утриманням. Інакше кожне
+                // натискання на бар давало б блимання.
+                source?.classList.add("rt__bar--dragging");
             }
 
             const top = geometry.rowOffsets[target.resourceIndex];
+            const rowHeight = geometry.rowOffsets[target.resourceIndex + 1] - top;
+
             element.style.left = `${target.slotIndex * geometry.slotWidth}px`;
             element.style.width = `${target.slotSpan * geometry.slotWidth}px`;
-            element.style.top = `${top}px`;
-            element.style.height = `${geometry.rowOffsets[target.resourceIndex + 1] - top}px`;
+
+            // Привид повторює силует бара, а не всю смугу рядка: прямокутник
+            // удвічі вищий за те, що тягнуть, показує рядок, а не місце. Там,
+            // де бара немає — виділення на порожньому, — смуга рядка якраз
+            // доречна; нульова висота означає середовище без розкладки
+            // (jsdom), і там теж береться рядок.
+            const fitted = box !== null && box.height > 0;
+            element.style.top = `${top + (fitted && box !== null ? box.top : 0)}px`;
+            element.style.height = `${fitted && box !== null ? box.height : rowHeight}px`;
 
             // Заборонену ціль видно одразу, а не після відпускання: інакше
             // жест мовчки нічого не робить, і це читається як поламане.
             element.classList.toggle("rt__ghost--invalid", !valid);
-            element.style.borderColor = valid ? "" : "#d64545";
-            element.style.background = valid ? "rgba(127,127,127,0.12)" : "rgba(214,69,69,0.12)";
         },
+
         remove() {
+            source?.classList.remove("rt__bar--dragging");
             element?.remove();
             element = null;
+            source = null;
+            box = null;
         },
     };
 }

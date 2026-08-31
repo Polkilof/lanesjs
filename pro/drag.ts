@@ -243,6 +243,10 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
 
                         grab.edge = edge;
                         grab.grabOffset = hit.slot.index - grab.placed.slotIndex;
+
+                        // Привид знає, чиє він відображення: висоту й місце в
+                        // рядку бере з бара, який тягнуть.
+                        ghost.fit(bar);
                         return grab;
                     },
 

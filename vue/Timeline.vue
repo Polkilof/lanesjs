@@ -1110,6 +1110,12 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     --rt-bar-text: #ffffff;
     /* Обведення фокуса: воно має бути видно і на барі, і на тлі сітки. */
     --rt-focus: #1d4ed8;
+    /* Привид жесту: куди стане бар, якщо відпустити тут. Пунктир і прозоре
+       тло — щоб під ним лишалось видно дні, на які він лягає. */
+    --rt-ghost-bg: rgba(29, 17, 39, 0.07);
+    --rt-ghost-line: rgba(29, 17, 39, 0.4);
+    --rt-ghost-invalid-bg: rgba(214, 69, 69, 0.12);
+    --rt-ghost-invalid-line: #d64545;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1124,6 +1130,10 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
         --rt-bar-bg: #7c5cf0;
         --rt-bar-text: #ffffff;
         --rt-focus: #a8c7ff;
+        --rt-ghost-bg: rgba(255, 255, 255, 0.1);
+        --rt-ghost-line: rgba(255, 255, 255, 0.45);
+        --rt-ghost-invalid-bg: rgba(255, 107, 107, 0.18);
+        --rt-ghost-invalid-line: #ff8a8a;
     }
 }
 
@@ -1138,6 +1148,10 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     --rt-bar-bg: #7c5cf0;
     --rt-bar-text: #ffffff;
     --rt-focus: #a8c7ff;
+    --rt-ghost-bg: rgba(255, 255, 255, 0.1);
+    --rt-ghost-line: rgba(255, 255, 255, 0.45);
+    --rt-ghost-invalid-bg: rgba(255, 107, 107, 0.18);
+    --rt-ghost-invalid-line: #ff8a8a;
 }
 
 .rt {
@@ -1424,6 +1438,34 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     outline: 2px solid var(--rt-focus);
     outline-offset: 2px;
     z-index: 3;
+}
+
+/**
+ * Привида малює плагін, а вдягає його компонент — і тільки через :where, щоб
+ * будь-яке правило застосунку важило більше. Тримати цей вигляд у плагіні
+ * означало б тримати його інлайном, а інлайн не перебити нічим, крім
+ * !important: застосунок лишався б без права голосу на єдиному, що видно під
+ * час жесту.
+ */
+:where(.rt__ghost) {
+    box-sizing: border-box;
+    background: var(--rt-ghost-bg);
+    border: 1px dashed var(--rt-ghost-line);
+    border-radius: var(--rt-radius);
+}
+
+:where(.rt__ghost--invalid) {
+    background: var(--rt-ghost-invalid-bg);
+    border-color: var(--rt-ghost-invalid-line);
+}
+
+/**
+ * Бар, який тягнуть, пригасає: під час жесту головне — куди він стане, а не
+ * звідки поїхав. Зовсім ховати його не можна — саме порівняння «звідки» і
+ * «куди» й показує, наскільки посунули.
+ */
+:where(.rt__bar--dragging) {
+    opacity: 0.4;
 }
 
 /**
