@@ -145,15 +145,25 @@ export function licenseStatus(): Promise<LicenseCheck> {
 /** Скільки чекати на ключ, перш ніж вирішити, що його не буде. */
 const GRACE = 1000;
 
+/**
+ * Куди йти по ключ. Єдина адреса в бібліотеці — і та лише в тексті.
+ *
+ * Сторінка проєкту, а не репозиторій: вона й продає. Своїм доменом її можна
+ * підмінити пізніше, не ламаючи вже опублікованих версій — GitHub Pages сам
+ * перенаправляє стару адресу на новий домен.
+ */
+const HOME = "https://polkilof.github.io/lanesjs/";
+
 const NOTICE: Record<string, string> = {
     unlicensed:
         "Lanes Pro is running without a licence key. Nothing is disabled — the paid plugins work either way. " +
-        "If this is a commercial project, please buy a licence and set it with setLicense(key).",
+        `If this is a commercial project, please buy a licence at ${HOME} and set it with setLicense(key).`,
     invalid:
-        "Lanes Pro does not recognise this licence key. Nothing is disabled, but the key is either mistyped or not ours.",
+        "Lanes Pro does not recognise this licence key. Nothing is disabled, but the key is either mistyped " +
+        `or not ours. Keys are issued at ${HOME}`,
     outdated:
         "This Lanes Pro licence covers updates released earlier than this build. Nothing is disabled — " +
-        "renew the licence to keep the notice away.",
+        `renew the licence at ${HOME} to keep the notice away.`,
 };
 
 const BADGE: Record<string, string> = {

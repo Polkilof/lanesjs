@@ -1,10 +1,19 @@
 {
-    "name": "lanes-timeline",
+    "name": "lanesjs",
     "version": "0.1.0",
     "description": "Resource timeline for Vue 3: virtualized rows, day and week axis, plugin hooks.",
     "type": "module",
-    "license": "UNLICENSED",
+    "license": "SEE LICENSE IN LICENSE.md",
     "private": false,
+    "author": "Polkilof",
+    "homepage": "https://polkilof.github.io/lanesjs/",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Polkilof/lanesjs.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Polkilof/lanesjs/issues"
+    },
     "sideEffects": [
         "**/*.css"
     ],
