@@ -22,13 +22,14 @@
             <div class="rt__axis-viewport">
                 <div ref="headerTrackRef" class="rt__axis">
                     <div
-                        v-for="slot in layout.slots"
+                        v-for="slot in visibleSlots"
                         :key="slot.start"
                         class="rt__axis-cell"
                         :class="[
                             { 'rt__axis-cell--today': slot.isToday, 'rt__axis-cell--weekend': slot.isWeekend },
                             props.slotClass?.(slot),
                         ]"
+                        :style="{ gridColumnStart: slot.index + 1 }"
                         @click="onSlotLabelClick($event, slot)"
                     >
                         <slot name="slot-label" :slot-data="slot">
@@ -84,9 +85,9 @@
                     :class="{ 'rt__row--last': visible.isLast }"
                     :style="rowStyle(visible)"
                     :data-resource="visible.row.resource.id"
-                >
                     role="group"
                     :aria-label="String(visible.row.resource.title)"
+                >
                     <div
                         v-for="placed in visible.row.backgrounds"
                         :key="placed.item.id"
@@ -114,13 +115,13 @@
                         ]"
                         :style="[barStyle(placed), props.itemStyle?.(placed, visible.row.resource)]"
                         :data-item="placed.item.id"
-                        @click.stop="onBarClick($event, placed.item, visible.row.resource)"
                         role="button"
                         :tabindex="placed.item.id === entryItem ? 0 : -1"
                         :aria-label="barLabel(placed, visible.row.resource)"
-                    >
+                        @click.stop="onBarClick($event, placed.item, visible.row.resource)"
                         @keydown="onBarKeydown($event, placed, visible.row.resource)"
                         @focus="focusedItem = placed.item.id"
+                    >
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
                             {{ placed.item.id }}
                         </slot>
@@ -181,7 +182,6 @@ const props = withDefaults(
         items: Item<I>[];
         range: DateRange;
         step?: SlotStep;
-        today?: IsoDate;
         /**
          * Мова підписів осі. Файлів локалей ми не возимо: усе потрібне вже є
          * в `Intl`, від нас — лише передати мову. Без неї береться мова
@@ -195,6 +195,7 @@ const props = withDefaults(
          * майже завжди знає краще, бо в `meta` у нього ще й людина, і статус.
          */
         itemLabel?: (placed: PlacedItem<I>, resource: Resource<R>) => string | undefined;
+        today?: IsoDate;
         weekendDays?: number[];
         weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         plugins?: Plugin<R, I>[];
@@ -255,28 +256,6 @@ const props = withDefaults(
     },
 );
 
-const pageScroll = computed(() => props.scroll === "page");
-const modeClass = computed(() => (pageScroll.value ? "rt--page-scroll" : "rt--container-scroll"));
-/**
- * Відступ під чужу шапку теж кратний пристроєвому пікселю: коли наша шапка
- * прилипає, саме він задає, де опиниться її нижня межа.
- */
-const headerStyle = computed(() =>
-    pageScroll.value ? { top: `${snapToDevice(props.stickyOffset, Math.ceil)}px` } : undefined,
-);
-
-/**
- * У payload іде і подія, і `target` — елемент, до якого можна прив'язати попап
- * чи меню. Окреме поле не зайве: `event.currentTarget` обнуляється, щойно
- * діспатч завершився, тож збережена подія віддала б null.
- */
-const emit = defineEmits<{
-    "cell-click": [payload: { date: IsoDate; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
-    "item-click": [payload: { item: Item<I>; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
-    "slot-click": [payload: { slot: Slot; event: MouseEvent; target: HTMLElement }];
-    /** Фактичний діапазон осі — при тижневому кроці ширший за заданий у props. */
-    "range-change": [range: DateRange];
-}>();
 /**
  * Форматери створюються раз на мову, а не на слот: `Intl.DateTimeFormat`
  * коштує дорого, а слотів на осі буває тисяча.
@@ -314,6 +293,28 @@ function rangeLabel(slot: Slot): string {
     return formatSpan(slot.date, last);
 }
 
+const pageScroll = computed(() => props.scroll === "page");
+const modeClass = computed(() => (pageScroll.value ? "rt--page-scroll" : "rt--container-scroll"));
+/**
+ * Відступ під чужу шапку теж кратний пристроєвому пікселю: коли наша шапка
+ * прилипає, саме він задає, де опиниться її нижня межа.
+ */
+const headerStyle = computed(() =>
+    pageScroll.value ? { top: `${snapToDevice(props.stickyOffset, Math.ceil)}px` } : undefined,
+);
+
+/**
+ * У payload іде і подія, і `target` — елемент, до якого можна прив'язати попап
+ * чи меню. Окреме поле не зайве: `event.currentTarget` обнуляється, щойно
+ * діспатч завершився, тож збережена подія віддала б null.
+ */
+const emit = defineEmits<{
+    "cell-click": [payload: { date: IsoDate; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
+    "item-click": [payload: { item: Item<I>; resource: Resource<R>; event: MouseEvent; target: HTMLElement }];
+    "slot-click": [payload: { slot: Slot; event: MouseEvent; target: HTMLElement }];
+    /** Фактичний діапазон осі — при тижневому кроці ширший за заданий у props. */
+    "range-change": [range: DateRange];
+}>();
 
 const rootRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
@@ -479,6 +480,34 @@ const rowHeights = computed(() =>
     ),
 );
 
+/**
+ * Горизонтальне вікно. Тримається окремо від імперативного зсуву шапки: той
+ * має бути миттєвим і не чекати на перемальовку Vue, а це — стан, від якого
+ * залежить, які клітинки взагалі існують.
+ */
+const scrollLeft = ref(0);
+const viewportWidth = ref(0);
+
+/**
+ * Скільки клітинок шапки справді в розмітці. Слоти однакової ширини, тож
+ * рахувати їх поодинці нема потреби — досить поділити. Поки ширина вікна
+ * невідома (SSR, тести), малюємо все: краще зайвий DOM, ніж порожня шапка —
+ * те саме правило, що й для рядків.
+ */
+const visibleSlots = computed<Slot[]>(() => {
+    const slots = layout.value.slots;
+    const width = slotWidth.value;
+    if (viewportWidth.value <= 0 || width <= 0) return slots;
+
+    const first = Math.max(0, Math.floor(scrollLeft.value / width) - props.overscan);
+    const last = Math.min(
+        slots.length,
+        Math.ceil((scrollLeft.value + viewportWidth.value) / width) + props.overscan,
+    );
+
+    return slots.slice(first, last);
+});
+
 const offsets = computed(() => rowOffsets(rowHeights.value));
 const totalHeight = computed(() => offsets.value[offsets.value.length - 1] ?? 0);
 
@@ -533,6 +562,7 @@ function onScroll() {
     if (!pageScroll.value) scrollTop.value = scroller.scrollTop;
 
     const offset = scroller.scrollLeft;
+    scrollLeft.value = offset;
     if (headerTrackRef.value !== null) {
         headerTrackRef.value.style.transform = `translateX(${-offset}px)`;
     }
@@ -595,6 +625,7 @@ function syncViewport() {
     if (scroller === null) return;
 
     contentWidth.value = scroller.scrollWidth;
+    viewportWidth.value = scroller.clientWidth;
     // Масштаб сторінки змінюється разом із її розміром, тож читається тут же
     pixelRatio.value = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     measureVertical();
@@ -743,47 +774,6 @@ function onBarClick(event: MouseEvent, item: Item<I>, resource: Resource<R>) {
     emit("item-click", { item, resource, event, target: event.currentTarget as HTMLElement });
     notify("itemClick", { item, resource });
 }
-
-/**
- * Ресурс і день під точкою. Єдине місце, де геометрія читається назад — з
- * пікселів у дані, — і тому ним користуються всі: і клік по порожньому місцю,
- * і плагіни. Дві реалізації того самого розійшлися б на першому ж вирівнюванні.
- */
-function hitTest(point: { x: number; y: number }): HitTest<R> | null {
-    const body = bodyRef.value;
-    const slots = layout.value.slots;
-    const rows = layout.value.rows;
-    if (body === null || slots.length === 0 || rows.length === 0) return null;
-
-    // Панель ресурсів липка й лежить поверх сітки: те, що під нею, користувач
-    // не бачить, тож і влучанням це не є.
-    const pane = resourcesRef.value?.getBoundingClientRect();
-    if (pane !== undefined && point.x < pane.right) return null;
-
-    const rect = body.getBoundingClientRect();
-    const x = point.x - rect.left;
-    const y = point.y - rect.top;
-    if (x < 0 || y < 0 || x >= slotWidth.value * slots.length || y >= totalHeight.value) return null;
-
-    const resourceIndex = rowAt(offsets.value, y);
-    const slot = slots[Math.floor(x / slotWidth.value)];
-
-    return { resource: rows[resourceIndex].resource, resourceIndex, slot, date: slot.start };
-}
-
-/** Клік по порожньому місцю. */
-function onBodyClick(event: MouseEvent) {
-    const rowEl = (event.target as HTMLElement).closest<HTMLElement>(".rt__row");
-    if (rowEl === null) return;
-
-    const hit = hitTest({ x: event.clientX, y: event.clientY });
-    if (hit === null) return;
-
-    emit("cell-click", { date: hit.date, resource: hit.resource, event, target: rowEl });
-    notify("cellClick", { date: hit.date, resource: hit.resource });
-}
-
-/* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
 
 /* ── Клавіатура ───────────────────────────────────────────────────────── */
 
@@ -934,6 +924,47 @@ function onBarKeydown(event: KeyboardEvent, placed: PlacedItem<I>, resource: Res
 }
 
 /**
+ * Ресурс і день під точкою. Єдине місце, де геометрія читається назад — з
+ * пікселів у дані, — і тому ним користуються всі: і клік по порожньому місцю,
+ * і плагіни. Дві реалізації того самого розійшлися б на першому ж вирівнюванні.
+ */
+function hitTest(point: { x: number; y: number }): HitTest<R> | null {
+    const body = bodyRef.value;
+    const slots = layout.value.slots;
+    const rows = layout.value.rows;
+    if (body === null || slots.length === 0 || rows.length === 0) return null;
+
+    // Панель ресурсів липка й лежить поверх сітки: те, що під нею, користувач
+    // не бачить, тож і влучанням це не є.
+    const pane = resourcesRef.value?.getBoundingClientRect();
+    if (pane !== undefined && point.x < pane.right) return null;
+
+    const rect = body.getBoundingClientRect();
+    const x = point.x - rect.left;
+    const y = point.y - rect.top;
+    if (x < 0 || y < 0 || x >= slotWidth.value * slots.length || y >= totalHeight.value) return null;
+
+    const resourceIndex = rowAt(offsets.value, y);
+    const slot = slots[Math.floor(x / slotWidth.value)];
+
+    return { resource: rows[resourceIndex].resource, resourceIndex, slot, date: slot.start };
+}
+
+/** Клік по порожньому місцю. */
+function onBodyClick(event: MouseEvent) {
+    const rowEl = (event.target as HTMLElement).closest<HTMLElement>(".rt__row");
+    if (rowEl === null) return;
+
+    const hit = hitTest({ x: event.clientX, y: event.clientY });
+    if (hit === null) return;
+
+    emit("cell-click", { date: hit.date, resource: hit.resource, event, target: rowEl });
+    notify("cellClick", { date: hit.date, resource: hit.resource });
+}
+
+/* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
+
+/**
  * Сховище підписок. Типізацію тримає сигнатура `on` у контракті; всередині
  * типи стерті, інакше мапований тип не дає покласти Set у комірку.
  */
@@ -1077,6 +1108,8 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     --rt-weekend-bg: rgba(107, 114, 128, 0.06);
     --rt-bar-bg: #4f2dc5;
     --rt-bar-text: #ffffff;
+    /* Обведення фокуса: воно має бути видно і на барі, і на тлі сітки. */
+    --rt-focus: #1d4ed8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1090,6 +1123,7 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
         --rt-weekend-bg: rgba(255, 255, 255, 0.05);
         --rt-bar-bg: #7c5cf0;
         --rt-bar-text: #ffffff;
+        --rt-focus: #a8c7ff;
     }
 }
 
@@ -1103,6 +1137,7 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     --rt-weekend-bg: rgba(255, 255, 255, 0.05);
     --rt-bar-bg: #7c5cf0;
     --rt-bar-text: #ffffff;
+    --rt-focus: #a8c7ff;
 }
 
 .rt {
@@ -1135,8 +1170,6 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: var(--rt-resource-width) minmax(0, 1fr);
-    /* Обведення фокуса: воно має бути видно і на барі, і на тлі сітки. */
-    --rt-focus: #1d4ed8;
     column-gap: var(--rt-pane-gap);
 }
 
@@ -1150,7 +1183,6 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
 
 .rt__scroller {
     flex: 1 1 auto;
-        --rt-focus: #a8c7ff;
     min-height: 0;
     overflow-x: auto;
 }
@@ -1164,7 +1196,6 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
  * донизу, побачиш дві поспіль — її і прилиплу. Ховаємо справжню; прокрутка
  * колесом, тачпадом і клавіатурою від цього не зникає, а видима лишається одна.
  */
-    --rt-focus: #a8c7ff;
 .rt--page-scroll .rt__scroller {
     scrollbar-width: none;
 }
@@ -1222,7 +1253,10 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: var(--rt-slot-width);
-    width: max-content;
+    /* Ширина рахується, а не міряється по вмісту: у розмітці лежать лише
+       видимі клітинки, і max-content зіщулив би вісь до них. Кожна клітинка
+       знає свою колонку, тож порожні місця тримають самі себе. */
+    width: calc(var(--rt-slot-width) * var(--rt-slot-count));
     /* Добір висоти до цілого пристроєвого пікселя: інакше нижня межа шапки
        ділиться між двома рядами пікселів і на світлій лінії просто зникає. */
     padding-bottom: var(--rt-header-pad, 0px);
@@ -1245,9 +1279,19 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     cursor: default;
 }
 
+.rt__axis-weekday {
+    color: var(--rt-muted);
+    font-size: 11px;
+}
+
 .rt__axis-cell--today {
     background: var(--rt-today-bg);
     font-weight: 700;
+}
+
+/* «Сьогодні» виділяється числом; день тижня під ним лишається другорядним. */
+.rt__axis-cell--today .rt__axis-weekday {
+    font-weight: 400;
 }
 
 .rt__axis-cell--weekend {
@@ -1279,21 +1323,11 @@ defineExpose({ layout, syncViewport, scrollToDate, print });
     box-sizing: border-box;
     padding: 0 12px;
     overflow: hidden;
-.rt__axis-weekday {
-    color: var(--rt-muted);
-    font-size: 11px;
-}
-
     border-bottom: 1px solid var(--rt-grid-line);
 }
 
 /**
  * Вертикальні лінії сітки — градієнт, а не DOM на клітинку (рішення 09):
-/* «Сьогодні» виділяється числом; день тижня під ним лишається другорядним. */
-.rt__axis-cell--today .rt__axis-weekday {
-    font-weight: 400;
-}
-
  * 300 ресурсів на місяць коштують 300 рядків, а не 9300 клітинок.
  */
 .rt__body {
