@@ -303,11 +303,80 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 () => ctx.getGeometry(),
             );
 
+            /**
+             * Те саме, що жест, але з клавіатури. Без цього все, що вміє миша,
+             * для клавіатури просто не існує — а це вже не незручність, а
+             * недоступність: користувач бачить бар, чує його ім'я й не може
+             * зробити з ним нічого.
+             *
+             * Shift — увесь бар, Alt — його край: та сама пара, що середина й
+             * край під вказівником. Голі стрілки не наші, ними ходить фокус.
+             */
+            function onKeydown(event: KeyboardEvent) {
+                if (!event.shiftKey && !event.altKey) return;
+
+                const bar = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".rt__bar");
+                const id = bar?.dataset.item;
+                if (id === undefined) return;
+
+                const days = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                const rows = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+                if (days === 0 && rows === 0) return;
+
+                const grab = findBar(id);
+                if (grab === undefined) return;
+
+                const layout = ctx.getLayout();
+                const slots = layout.slots.length;
+
+                if (event.altKey) {
+                    if (options.onResize === undefined || days === 0) return;
+
+                    const span = grab.placed.slotSpan + days;
+                    // День — мінімум, край осі — межа: ті самі правила, що й у жесті.
+                    if (span < 1 || grab.placed.slotIndex + span > slots) return;
+
+                    grab.edge = "end";
+                    const target = {
+                        slotIndex: grab.placed.slotIndex,
+                        slotSpan: span,
+                        resourceIndex: grab.resourceIndex,
+                    };
+
+                    const resize = resizeOf(grab, target);
+                    if (resize === null || !(options.canResize?.(resize) ?? true)) return;
+
+                    event.preventDefault();
+                    options.onResize(resize);
+                    return;
+                }
+
+                if (options.onMove === undefined) return;
+
+                const target = {
+                    slotIndex: Math.min(
+                        Math.max(grab.placed.slotIndex + days, 0),
+                        slots - grab.placed.slotSpan,
+                    ),
+                    slotSpan: grab.placed.slotSpan,
+                    resourceIndex: Math.min(Math.max(grab.resourceIndex + rows, 0), layout.rows.length - 1),
+                };
+                if (!changed(grab, target)) return;
+
+                const move = moveOf(grab, target);
+                if (move === null || !(options.canMove?.(move) ?? true)) return;
+
+                event.preventDefault();
+                options.onMove(move);
+            }
+
             root.addEventListener("pointermove", onHover);
+            root.addEventListener("keydown", onKeydown);
             const unguard = guard(root);
 
             return () => {
                 root.removeEventListener("pointermove", onHover);
+                root.removeEventListener("keydown", onKeydown);
                 untrack();
                 unguard();
             };

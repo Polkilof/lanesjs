@@ -1,5 +1,12 @@
 <template>
-    <div ref="rootRef" class="rt" :class="[themeClass, modeClass]" :style="rootStyle">
+    <div
+        ref="rootRef"
+        class="rt"
+        :class="[themeClass, modeClass]"
+        :style="rootStyle"
+        role="group"
+        :aria-label="props.label"
+    >
         <!--
             Шапка — окрема смуга над скролером, а не рядок усередині нього.
             Тоді під нею нічого не проїжджає, а в режимі сторінки вона може
@@ -78,6 +85,8 @@
                     :style="rowStyle(visible)"
                     :data-resource="visible.row.resource.id"
                 >
+                    role="group"
+                    :aria-label="String(visible.row.resource.title)"
                     <div
                         v-for="placed in visible.row.backgrounds"
                         :key="placed.item.id"
@@ -106,7 +115,12 @@
                         :style="[barStyle(placed), props.itemStyle?.(placed, visible.row.resource)]"
                         :data-item="placed.item.id"
                         @click.stop="onBarClick($event, placed.item, visible.row.resource)"
+                        role="button"
+                        :tabindex="placed.item.id === entryItem ? 0 : -1"
+                        :aria-label="barLabel(placed, visible.row.resource)"
                     >
+                        @keydown="onBarKeydown($event, placed, visible.row.resource)"
+                        @focus="focusedItem = placed.item.id"
                         <slot name="item" :placed="placed" :resource="visible.row.resource">
                             {{ placed.item.id }}
                         </slot>
@@ -168,6 +182,19 @@ const props = withDefaults(
         range: DateRange;
         step?: SlotStep;
         today?: IsoDate;
+        /**
+         * Мова підписів осі. Файлів локалей ми не возимо: усе потрібне вже є
+         * в `Intl`, від нас — лише передати мову. Без неї береться мова
+         * браузера, а власна розмітка підпису — слот `slot-label`.
+         */
+        locale?: string;
+        /** Назва таблиці для тих, хто її не бачить: «Графік команди». */
+        label?: string;
+        /**
+         * Ім'я бара для екранного читача. Типово — ресурс і дати; застосунок
+         * майже завжди знає краще, бо в `meta` у нього ще й людина, і статус.
+         */
+        itemLabel?: (placed: PlacedItem<I>, resource: Resource<R>) => string | undefined;
         weekendDays?: number[];
         weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         plugins?: Plugin<R, I>[];
@@ -182,12 +209,6 @@ const props = withDefaults(
          * Класи на колонку — свята, блекаути, межі спринтів. Слот із класом
          * отримує накладку на всю висоту нарівні з «сьогодні» й вихідними.
          */
-        /**
-         * Мова підписів осі. Файлів локалей ми не возимо: усе потрібне вже є
-         * в `Intl`, від нас — лише передати мову. Без неї береться мова
-         * браузера, а власна розмітка підпису — слот `slot-label`.
-         */
-        locale?: string;
         slotClass?: (slot: Slot) => string | string[] | undefined;
         /**
          * Розміри в пікселях; кольори й решта оформлення — через токени --rt-*.
@@ -754,6 +775,154 @@ function onBodyClick(event: MouseEvent) {
 
 /* ── Плагіни (рішення 01) ─────────────────────────────────────────────── */
 
+/* ── Клавіатура ───────────────────────────────────────────────────────── */
+
+/**
+ * Бар, який зараз тримає фокус у табуляції. Табом у таблицю входять один раз і
+ * потрапляють сюди, а далі ходять стрілками: інакше тридцять броней означали б
+ * тридцять натискань Tab, щоб її проминути.
+ */
+const focusedItem = ref<string | null>(null);
+
+/** Перший бар — вхід у таблицю, поки користувач не обрав інший. */
+const entryItem = computed(() => {
+    const found = focusedItem.value;
+    if (found !== null && layout.value.rows.some((row) => row.bars.some((bar) => bar.item.id === found))) {
+        return found;
+    }
+    return layout.value.rows.find((row) => row.bars.length > 0)?.bars[0]?.item.id ?? null;
+});
+
+/**
+ * Ім'я бара для тих, хто його не бачить. За замовчуванням — ресурс і дати:
+ * «Кімната 101, 2–5 бер». Застосунок майже завжди знає краще, тож може дати
+ * своє через `itemLabel`.
+ */
+function barLabel(placed: PlacedItem<I>, resource: Resource<R>): string {
+    const custom = props.itemLabel?.(placed, resource);
+    if (custom !== undefined) return custom;
+
+    const slots = layout.value.slots;
+    const first = slots[placed.slotIndex];
+    const last = slots[placed.slotIndex + placed.slotSpan - 1];
+    if (first === undefined || last === undefined) return String(resource.title);
+
+    return `${resource.title}, ${formatSpan(first.date, last.date)}`;
+}
+
+/** Де зараз фокус: рядок і місце бара в ньому. */
+function locate(id: string): { row: number; bar: number } | null {
+    const rows = layout.value.rows;
+    for (let row = 0; row < rows.length; row++) {
+        const bar = rows[row].bars.findIndex((candidate) => candidate.item.id === id);
+        if (bar !== -1) return { row, bar };
+    }
+    return null;
+}
+
+/**
+ * Перевести фокус на бар. Сусідній рядок завжди намальований — віртуалізація
+ * тримає запас поза вікном, — тож досить дочекатися перемальовки й попросити
+ * браузер догорнути до нього.
+ */
+async function focusBar(id: string) {
+    focusedItem.value = id;
+    await nextTick();
+
+    // Шукаємо перебором, а не селектором: у селекторі ідентифікатор довелося б
+    // екранувати, а в ньому може бути що завгодно — це чужі дані.
+    const bars = bodyRef.value?.querySelectorAll<HTMLElement>(".rt__bar") ?? [];
+    for (const bar of bars) {
+        if (bar.dataset.item !== id) continue;
+
+        bar.focus();
+        bar.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        return;
+    }
+}
+
+/**
+ * Стрілки вздовж рядка ведуть від бара до бара, а не по днях: порожні дні між
+ * бронями рахувати ніхто не хоче. Вгору-вниз шукається бар, найближчий за
+ * часом, — рядки не вирівняні між собою, і «той самий стовпчик» тут порожній.
+ */
+function step(id: string, direction: "left" | "right" | "up" | "down"): string | null {
+    const at = locate(id);
+    if (at === null) return null;
+
+    const rows = layout.value.rows;
+
+    if (direction === "left" || direction === "right") {
+        const next = at.bar + (direction === "right" ? 1 : -1);
+        return rows[at.row].bars[next]?.item.id ?? null;
+    }
+
+    const from = rows[at.row].bars[at.bar].slotIndex;
+    const way = direction === "down" ? 1 : -1;
+
+    for (let row = at.row + way; row >= 0 && row < rows.length; row += way) {
+        const bars = rows[row].bars;
+        if (bars.length === 0) continue;
+
+        let nearest = bars[0];
+        for (const bar of bars) {
+            if (Math.abs(bar.slotIndex - from) < Math.abs(nearest.slotIndex - from)) nearest = bar;
+        }
+        return nearest.item.id;
+    }
+
+    return null;
+}
+
+function onBarKeydown(event: KeyboardEvent, placed: PlacedItem<I>, resource: Resource<R>) {
+    // Стрілки з модифікаторами — не наші: ними платний шар рухає бар, і
+    // забрати їх собі означало б посунути фокус замість броні.
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+
+    const id = placed.item.id;
+
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        emit("item-click", {
+            item: placed.item,
+            resource,
+            event: new MouseEvent("click"),
+            target: event.currentTarget as HTMLElement,
+        });
+        notify("itemClick", { item: placed.item, resource });
+        return;
+    }
+
+    const moves: Record<string, "left" | "right" | "up" | "down"> = {
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        ArrowUp: "up",
+        ArrowDown: "down",
+    };
+
+    if (event.key === "Home" || event.key === "End") {
+        const at = locate(id);
+        const bars = at === null ? [] : layout.value.rows[at.row].bars;
+        const target = event.key === "Home" ? bars[0] : bars[bars.length - 1];
+        if (target !== undefined) {
+            event.preventDefault();
+            void focusBar(target.item.id);
+        }
+        return;
+    }
+
+    const direction = moves[event.key];
+    if (direction === undefined) return;
+
+    const next = step(id, direction);
+    if (next === null) return;
+
+    // Стрілку забираємо, лише коли справді є куди йти: інакше на краю таблиці
+    // сторінка перестала б прокручуватись, і це виглядало б як зависання.
+    event.preventDefault();
+    void focusBar(next);
+}
+
 /**
  * Сховище підписок. Типізацію тримає сигнатура `on` у контракті; всередині
  * типи стерті, інакше мапований тип не дає покласти Set у комірку.
@@ -939,6 +1108,8 @@ defineExpose({ layout, syncViewport, scrollToDate });
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: var(--rt-resource-width) minmax(0, 1fr);
+    /* Обведення фокуса: воно має бути видно і на барі, і на тлі сітки. */
+    --rt-focus: #1d4ed8;
     column-gap: var(--rt-pane-gap);
 }
 
@@ -952,6 +1123,7 @@ defineExpose({ layout, syncViewport, scrollToDate });
 
 .rt__scroller {
     flex: 1 1 auto;
+        --rt-focus: #a8c7ff;
     min-height: 0;
     overflow-x: auto;
 }
@@ -965,6 +1137,7 @@ defineExpose({ layout, syncViewport, scrollToDate });
  * донизу, побачиш дві поспіль — її і прилиплу. Ховаємо справжню; прокрутка
  * колесом, тачпадом і клавіатурою від цього не зникає, а видима лишається одна.
  */
+    --rt-focus: #a8c7ff;
 .rt--page-scroll .rt__scroller {
     scrollbar-width: none;
 }
@@ -1186,3 +1359,14 @@ defineExpose({ layout, syncViewport, scrollToDate });
     font-weight: 400;
 }
 
+/**
+ * Обведення зовні бара, а не всередині: бар вузький, і рамка по внутрішньому
+ * краю з'їла б підпис. `outline` місця не займає, тож сусіди не рухаються.
+ */
+.rt__bar:focus-visible {
+    outline: 2px solid var(--rt-focus);
+    outline-offset: 2px;
+    z-index: 3;
+}
+
+/**
