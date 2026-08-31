@@ -11,6 +11,7 @@
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
 import { addDays, diffDays, toEpoch, toIso } from "../core/date";
+import { guard } from "./license";
 import { makeGhost, trackPointer } from "./gesture";
 import type { Target } from "./gesture";
 import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource } from "../core/types";
@@ -303,10 +304,12 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             );
 
             root.addEventListener("pointermove", onHover);
+            const unguard = guard(root);
 
             return () => {
                 root.removeEventListener("pointermove", onHover);
                 untrack();
+                unguard();
             };
         },
     };

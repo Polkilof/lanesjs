@@ -9,6 +9,7 @@
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
+import { guard } from "./license";
 import { makeGhost, trackPointer } from "./gesture";
 import type { Target } from "./gesture";
 import type { IsoDate, Plugin, PluginContext, Resource } from "../core/types";
@@ -76,7 +77,8 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                 return { resource, start: first.start, end: last.end, days: target.slotSpan };
             }
 
-            return trackPointer<Anchor>(
+            const unguard = guard(root);
+            const untrack = trackPointer<Anchor>(
                 {
                     root,
                     threshold: options.threshold ?? 4,
@@ -119,6 +121,11 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                 ghost,
                 () => ctx.getGeometry(),
             );
+
+            return () => {
+                untrack();
+                unguard();
+            };
         },
     };
 }

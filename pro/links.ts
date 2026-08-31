@@ -9,6 +9,7 @@
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
+import { guard } from "./license";
 import type { Geometry, Layout, Plugin, PluginContext } from "../core/types";
 
 /** Пара ідентифікаторів подій; напрямок від `from` до `to`. */
@@ -106,10 +107,12 @@ export function links<R = unknown, I = unknown>(options: LinksOptions): Plugin<R
             }
 
             const unsubscribe = ctx.on("layout", draw);
+            const unguard = guard(ctx.getRoot());
             draw();
 
             return () => {
                 unsubscribe();
+                unguard();
                 svg.remove();
             };
         },

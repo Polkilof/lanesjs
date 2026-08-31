@@ -10,6 +10,7 @@
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
+import { guard } from "./license";
 import type { Plugin } from "../core/types";
 
 export interface HistoryEntry {
@@ -107,11 +108,17 @@ export function history<R = unknown, I = unknown>(options: HistoryOptions = {}):
 
     return {
         name: "history",
-        setup() {
-            if (options.keys === false) return;
+        setup(ctx) {
+            // Стек — теж платна поведінка, тож перевірка не залежить від
+            // того, слухаємо ми клавіші чи ні.
+            const unguard = guard(ctx.getRoot());
+            if (options.keys === false) return unguard;
 
             window.addEventListener("keydown", onKeyDown);
-            return () => window.removeEventListener("keydown", onKeyDown);
+            return () => {
+                window.removeEventListener("keydown", onKeyDown);
+                unguard();
+            };
         },
         push,
         undo,
