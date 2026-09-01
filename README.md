@@ -777,9 +777,9 @@ Measured on the published build, minified and gzipped:
 
 | | Raw | Gzipped |
 |---|---|---|
-| `lanesjs` (component, axis, layout) | 24.0 kB | 7.3 kB |
-| `lanesjs/style.css` | 6.6 kB | 1.7 kB |
-| `lanesjs/pro` (all four plugins) | 19.8 kB | 6.1 kB |
+| `lanesjs` (component, axis, layout) | 24.1 kB | 7.3 kB |
+| `lanesjs/style.css` | 6.7 kB | 1.7 kB |
+| `lanesjs/pro` (all four plugins) | 20.0 kB | 6.1 kB |
 
 Two entry points, not one: if you never import `lanesjs/pro`, you never bundle
 it. `vue` is a peer dependency and stays external — a second copy in the bundle
@@ -833,5 +833,12 @@ rather than the public tracker.
 
 ## Status
 
-`0.1.0` — in production in one application, API still allowed to move before
+`0.1.1` — in production in one application, API still allowed to move before
 `1.0`.
+
+`0.1.1` is a performance release and changes no API. A first render with nothing
+measured yet draws forty rows instead of every row, which is what SSR output now
+holds; mounting two thousand rows went from about 530ms to about 50ms. The
+`links` plugin indexes bars once per repaint instead of scanning the rows for
+each end of each link — at two thousand rows that was the difference between
+1.6s and 292ms.
