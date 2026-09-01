@@ -214,7 +214,28 @@
                             <Icon name="external" :size="15" />
                         </a>
                     </article>
+
+                    <article class="card plan">
+                        <h3 class="plan__name">Team</h3>
+                        <p class="plan__price">{{ TEAM_PRICE }}</p>
+                        <p class="plan__note">{{ TEAM_TERMS }}</p>
+                        <ul class="plan__list">
+                            <li v-for="line in TEAM_INCLUDES" :key="line">{{ line }}</li>
+                        </ul>
+                        <a class="btn btn--ghost plan__cta" :href="ISSUES" rel="noreferrer">
+                            Request keys
+                            <Icon name="external" :size="15" />
+                        </a>
+                    </article>
                 </div>
+
+                <p class="licence__fine">
+                    <strong>A key is counted per developer, not per project.</strong> Count the people who
+                    write or maintain code that imports the paid half — not your projects, your servers, or
+                    the people who merely use what you built. One developer with nine projects needs one key;
+                    five developers sharing one project need five, and by then the Team price is the cheaper
+                    of the two.
+                </p>
 
                 <p class="licence__fine">
                     That is an introductory price, and it says so because the API is still allowed to move
@@ -281,6 +302,9 @@ const LICENCE_FILE = "https://github.com/Polkilof/lanesjs/blob/main/LICENSE.md";
  */
 const PRO_PRICE = "$199";
 const PRO_TERMS = "Per developer. Perpetual licence, one year of updates.";
+
+const TEAM_PRICE = "$500";
+const TEAM_TERMS = "Five developer keys. The same licence, bought once.";
 
 const { theme, toggle } = useTheme();
 
@@ -411,6 +435,13 @@ const CORE_INCLUDES = [
     "Day and week steps, two scroll modes, printing",
     "Slots, tokens, events and the plugin API",
     "Keyboard support and screen reader labels",
+];
+
+const TEAM_INCLUDES = [
+    "Everything in Pro, for five people",
+    "$100 a developer instead of $199",
+    "One purchase, one renewal date",
+    "Cheaper than buying three separately",
 ];
 
 const PRO_INCLUDES = [
@@ -720,8 +751,8 @@ const PRO_INCLUDES = [
 .plans {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    max-width: 52rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    max-width: 74rem;
 }
 
 .plan {
