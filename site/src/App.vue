@@ -244,6 +244,39 @@
                     that you may build anything with the free half, including commercial products, but may not
                     republish it as a library of its own.
                 </p>
+
+                <div id="refunds" class="terms">
+                    <article class="card term">
+                        <h3 class="term__name">Refunds</h3>
+                        <p class="term__body">
+                            Thirty days. If the library does not do what this page and the documentation say
+                            it does, say so and the money comes back in full — that is the whole condition,
+                            and it is written into
+                            <a :href="LICENCE_FILE" rel="noreferrer">the licence</a> rather than only
+                            promised here. Where your local consumer law gives you more than this, it wins.
+                        </p>
+                    </article>
+
+                    <article class="card term">
+                        <h3 class="term__name">What arrives, and when</h3>
+                        <p class="term__body">
+                            The code is already on npm, free half and paid half in the same package, so
+                            nothing is held back until you pay. What you buy is the key: a signed string,
+                            issued by hand within one working day and sent to the address you order with.
+                        </p>
+                    </article>
+
+                    <article class="card term">
+                        <h3 class="term__name">Who answers</h3>
+                        <p class="term__body">
+                            Anything about a purchase — an invoice, a key that will not apply, a refund —
+                            goes to <a :href="`mailto:${CONTACT_EMAIL}`">{{ CONTACT_EMAIL }}</a>, and is
+                            answered by {{ MAINTAINER }}, who writes the library. Anything about the library
+                            itself is better in <a :href="ISSUES" rel="noreferrer">the issue tracker</a>,
+                            in public, where the next person with the same question finds it.
+                        </p>
+                    </article>
+                </div>
             </div>
         </section>
     </main>
@@ -259,6 +292,7 @@
                 <a :href="REPO" rel="noreferrer"><Icon name="github" :size="16" />GitHub</a>
                 <a :href="NPM" rel="noreferrer"><Icon name="npm" :size="16" />npm</a>
                 <a :href="ISSUES" rel="noreferrer"><Icon name="shield" :size="16" />Issues</a>
+                <a href="#refunds"><Icon name="undo" :size="16" />Refunds</a>
             </nav>
         </div>
     </footer>
@@ -289,6 +323,14 @@ const DOCS = "https://github.com/Polkilof/lanesjs#readme";
 const NPM = "https://www.npmjs.com/package/lanesjs";
 const ISSUES = "https://github.com/Polkilof/lanesjs/issues";
 const LICENCE_FILE = "https://github.com/Polkilof/lanesjs/blob/main/LICENSE.md";
+
+/**
+ * A buyer needs somewhere private to write: an invoice or an order number does
+ * not belong in a public issue tracker. This is the only place the address is
+ * spelled out, so changing it is one line.
+ */
+const CONTACT_EMAIL = "alex.kup.work@gmail.com";
+const MAINTAINER = "Oleksandr Kupriyanov";
 
 /**
  * Вступна ціна на час 0.x. Половина від найближчого аналога з тією ж моделлю
@@ -833,6 +875,33 @@ const PRO_INCLUDES = [
     color: var(--accent);
     text-decoration: underline;
     text-underline-offset: 3px;
+}
+
+.terms {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    max-width: 74rem;
+    margin-top: 2rem;
+}
+
+.term__name {
+    font-size: 1rem;
+}
+
+.term__body {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    text-wrap: pretty;
+}
+
+.term__body a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    /* An address is one long unbreakable word on a narrow screen. */
+    overflow-wrap: anywhere;
 }
 
 /* ---------- footer ---------- */

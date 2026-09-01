@@ -815,6 +815,11 @@ See [polkilof.github.io/lanesjs](https://polkilof.github.io/lanesjs/) for the
 live demo. Until the store is up, keys are issued by hand — open an issue at
 [github.com/Polkilof/lanesjs](https://github.com/Polkilof/lanesjs/issues).
 
+If the library does not do what this file says it does, say so within thirty days
+of buying and the money comes back in full. Anything about a purchase — an
+invoice, a key that will not apply, a refund — goes to <alex.kup.work@gmail.com>
+rather than the public tracker.
+
 ## Status
 
 `0.1.0` — in production in one application, API still allowed to move before

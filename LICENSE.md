@@ -76,7 +76,10 @@ charge is required to keep working software working.
 ## 5. Refunds
 
 If the Software does not do what its documentation says it does, and that is
-reported within 30 days of purchase, the purchase price is refunded.
+reported within 30 days of purchase, the purchase price is refunded. Where the
+purchaser's local consumer law grants a wider right of return, that law applies
+instead. Refunds are requested at the address in section 10, not in the public
+issue tracker.
 
 ## 6. No warranty
 
@@ -102,8 +105,15 @@ before termination may continue to be used by those end users.
 
 The laws of Ukraine, excluding conflict-of-law rules.
 
----
+## 10. Contact
+
+Anything about a purchase — an invoice, a key that will not apply, a refund —
+goes to <alex.kup.work@gmail.com>, answered by the copyright holder.
 
 Questions about licensing, and requests for a key, go to
-[github.com/Polkilof/lanesjs/issues](https://github.com/Polkilof/lanesjs/issues).
+[github.com/Polkilof/lanesjs/issues](https://github.com/Polkilof/lanesjs/issues),
+where the next person with the same question can read the answer.
+
+---
+
 The project lives at [polkilof.github.io/lanesjs](https://polkilof.github.io/lanesjs/).
