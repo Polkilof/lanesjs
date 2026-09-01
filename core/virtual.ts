@@ -1,14 +1,11 @@
 /**
- * Віртуалізація рядків: який зріз показувати при поточній прокрутці.
+ * Row virtualization: which slice to show at the current scroll position.
  *
- * Безкоштовна половина продукту (рішення 10): вертикаль віртуалізується без
- * стелі за кількістю рядків, вісь часу — вже платна історія.
- *
- * Чиста математика, жодного DOM: висоти приходять числами, тож те саме
- * обчислення однакове в браузері, в тестах і на сервері.
+ * Pure arithmetic, no DOM: heights arrive as numbers, so the same computation
+ * gives the same answer in the browser, in tests and on the server.
  */
 
-/** Кумулятивні зміщення; довжина на одиницю більша за кількість рядків. */
+/** Cumulative offsets; one element longer than the number of rows. */
 export function rowOffsets(heights: number[]): number[] {
     const offsets = new Array<number>(heights.length + 1);
     offsets[0] = 0;
@@ -20,16 +17,16 @@ export function rowOffsets(heights: number[]): number[] {
     return offsets;
 }
 
-/** Видимий зріз рядків; `end` — ексклюзивний, як і всюди в контракті. */
+/** A visible slice of rows; `end` is exclusive, as everywhere in the contract. */
 export interface RowSlice {
     start: number;
     end: number;
 }
 
 /**
- * Останній рядок, чиє зміщення не більше за позицію. Експортований, бо тим
- * самим пошуком користується і влучання вказівника: рядок під курсором — це
- * та сама задача, що й перший видимий рядок, тільки з іншим числом на вході.
+ * The last row whose offset does not exceed the position. Exported because
+ * pointer hit-testing needs the same search: the row under the cursor is the
+ * same problem as the first visible row, only with a different number coming in.
  */
 export function rowAt(offsets: number[], position: number): number {
     const lastRow = offsets.length - 2;
@@ -49,9 +46,9 @@ export function rowAt(offsets: number[], position: number): number {
 }
 
 /**
- * Нульова висота вікна означає, що міряти нема чого — SSR, прихована вкладка
- * або тестове середовище. Тоді показуємо все: краще зайвий DOM, ніж порожній
- * екран там, де прокрутки взагалі не існує.
+ * A viewport height of zero means there is nothing to measure - SSR, a hidden
+ * tab or a test environment. Then everything is shown: better extra DOM than an
+ * empty screen somewhere scrolling does not exist at all.
  */
 export function visibleSlice(
     offsets: number[],

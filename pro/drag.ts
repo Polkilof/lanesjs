@@ -1,14 +1,14 @@
 /**
- * Перетягування барів і розтягування країв — платна поведінка на безкоштовних
- * гачках. Плагін нічого не мутує: він рахує, що змінилось, і віддає це
- * застосунку. Дані лишаються там, де й були — компонент керований, і плагін не
- * має права заводити власне сховище (рішення 04).
+ * Dragging bars and stretching their edges - paid behaviour on free hooks. The
+ * plugin mutates nothing: it computes what changed and hands that to the
+ * application. The data stays where it was - the component is controlled, and a
+ * plugin has no right to keep a store of its own (decision 04).
  *
- * Обидва жести живуть в одному плагіні, бо починаються з того самого захвату
- * бара: що саме почалось, вирішує місце — край чи середина. Створення
- * виділенням натомість починається з порожнього місця, тож воно окремо.
+ * Both gestures live in one plugin, because both start from the same grab on a
+ * bar: what has begun is decided by the place - an edge or the middle.
+ * Select-to-create, by contrast, starts from empty space, so it lives apart.
  *
- * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
+ * The `pro/` folder imports from `core/` and `vue/`; never the other way round.
  */
 import { clamp, dayAxis, dayUnder } from "./days";
 import { guard } from "./license";
@@ -18,25 +18,25 @@ import type { IsoDate, Item, PlacedItem, Plugin, PluginContext, Resource } from 
 
 export type DragEdge = "start" | "end";
 
-/** Ширина зони краю під палець; для миші вистачає значно вужчої. */
+/** The width of the edge zone for a finger; a mouse does with a far narrower one. */
 const TOUCH_EDGE = 12;
 
 export interface DragMove<R = unknown, I = unknown> {
     item: Item<I>;
-    /** Ресурс, з якого забрали, і ресурс, у який поклали. */
+    /** The resource it was taken from, and the one it was put into. */
     from: Resource<R>;
     to: Resource<R>;
-    /** Нові межі елемента; `end` ексклюзивний, як і всюди в контракті. */
+    /** The item's new bounds; `end` is exclusive, as everywhere in the contract. */
     start: IsoDate;
     end: IsoDate;
-    /** Зсув у днях; від'ємний — уліво. */
+    /** The shift in days; negative means to the left. */
     days: number;
 }
 
 export interface DragResize<R = unknown, I = unknown> {
     item: Item<I>;
     resource: Resource<R>;
-    /** Який край тягнули; протилежний лишається на місці. */
+    /** Which edge was dragged; the opposite one stays put. */
     edge: DragEdge;
     start: IsoDate;
     end: IsoDate;
@@ -44,27 +44,28 @@ export interface DragResize<R = unknown, I = unknown> {
 
 export interface DragOptions<R = unknown, I = unknown> {
     /**
-     * Викликаються на відпусканні, якщо щось справді змінилось. Прийняти чи
-     * відхилити — справа застосунку: він володіє даними, ми лише рахуємо.
-     * Жест без обробника не починається взагалі: інакше користувач тягав би
-     * бар, який нікуди не переїде.
+     * Called on release, if something really changed. Accepting or refusing is
+     * the application's business: it owns the data, we only do the arithmetic.
+     * A gesture with no handler does not start at all: otherwise the user would
+     * drag a bar that will go nowhere.
      */
     onMove?: (move: DragMove<R, I>) => void;
     onResize?: (resize: DragResize<R, I>) => void;
     /**
-     * Чи дозволено таку ціль. Питається на кожному русі, тож заборонене місце
-     * видно ще під час жесту — і відпускання на ньому нічого не робить.
-     * Правила знає застосунок: перетин із чужою подією, чужий рядок, минуле.
+     * Whether such a target is allowed. Asked on every movement, so a forbidden
+     * place is visible while the gesture is still going - and releasing on it
+     * does nothing. The application knows the rules: overlapping someone else's
+     * event, the wrong row, the past.
      */
     canMove?: (move: DragMove<R, I>) => boolean;
     canResize?: (resize: DragResize<R, I>) => boolean;
-    /** Клас на привида — щоб застосунок оформив його по-своєму. */
+    /** A class on the ghost - so the application can style it its own way. */
     className?: string;
-    /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
+    /** How many pixels to travel before this counts as a gesture. */
     threshold?: number;
-    /** Скільки тримати палець, щоб жест почався на дотик; типово 400 мс. */
+    /** How long to hold a finger for a touch gesture to begin; 400 ms by default. */
     longPress?: number;
-    /** Ширина зони захвату краю. */
+    /** The width of the edge grab zone. */
     edgeSize?: number;
 }
 
@@ -72,16 +73,17 @@ interface Grab<R, I> {
     placed: PlacedItem<I>;
     resource: Resource<R>;
     resourceIndex: number;
-    /** Край, якщо тягнуть край; null — переїзд цілком. */
+    /** The edge, if an edge is being dragged; null means the whole bar moves. */
     edge: DragEdge | null;
     /**
-     * Межі елемента в днях осі; кінець ексклюзивний. Від'ємний початок означає
-     * бар, обрізаний лівим краєм діапазону, — і саме тому вони тут, а не
-     * виводяться з видимого прямокутника: у нього обрізане не влазить.
+     * The item's bounds in axis days; the end is exclusive. A negative start
+     * means a bar clipped by the left edge of the range - and that is exactly
+     * why they are kept here rather than derived from the visible rectangle:
+     * what is clipped does not fit into it.
      */
     startDay: number;
     endDay: number;
-    /** День осі, за який узяли бар. */
+    /** The axis day the bar was grabbed by. */
     grabDay: number;
 }
 
@@ -93,9 +95,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             const overlayEl = ctx.getOverlay();
             if (rootEl === null || overlayEl === null) return;
 
-            // Окремі імена після перевірки: звуження типу не переживає
-            // оголошення функцій — вони підняті, тож із погляду компілятора
-            // можуть виконатись і до неї.
+            // Separate names after the check: narrowing does not survive
+            // function declarations - they are hoisted, so as far as the
+            // compiler is concerned they may run before it.
             const root: HTMLElement = rootEl;
             const overlay: HTMLElement = overlayEl;
             const edgeSize = options.edgeSize ?? 6;
@@ -125,13 +127,14 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             /**
-             * Край під курсором. Зона не більша за третину бара: на дні в 30
-             * пікселів дві шестипіксельні смуги ще лишають середину, з якої
-             * бар можна взяти цілком.
+             * The edge under the cursor. The zone is never wider than a third
+             * of the bar: on a 30-pixel day two six-pixel strips still leave a
+             * middle from which the bar can be taken whole.
              *
-             * Пальцю шість пікселів не дати: він накриває десяток, і в край
-             * потрапляв би навмання — то розтягнув, то переїхав. Тому на дотик
-             * зона ширша; третина лишається стелею, тож середина є завжди.
+             * Six pixels is no good for a finger: it covers a dozen and would
+             * hit the edge at random - stretched one time, moved the next. So
+             * on touch the zone is wider; a third stays the ceiling, so a
+             * middle always exists.
              */
             function edgeAt(bar: HTMLElement, x: number, touch = false): DragEdge | null {
                 if (options.onResize === undefined) return null;
@@ -143,7 +146,7 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 return null;
             }
 
-            /** Курсор біля краю — інакше про розтягування ніхто не здогадається. */
+            /** A cursor near the edge - otherwise nobody would guess stretching exists. */
             function onHover(event: MouseEvent) {
                 const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
                 if (hovered !== null && hovered !== bar) {
@@ -157,16 +160,16 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             /**
-             * Видимий прямокутник бара в днях. Обрізане краєм діапазону сюди
-             * не входить — привид малює лише те, що видно, — але дати
-             * рахуються не з нього, а з самого елемента.
+             * The bar's visible rectangle, in days. What the edge of the range
+             * clipped is not part of it - the ghost draws only what is visible -
+             * but the dates are computed from the item itself, not from this.
              */
             function visible(grab: Grab<R, I>): { from: number; to: number } {
                 const axis = dayAxis(ctx.getLayout());
                 return { from: Math.max(grab.startDay, 0), to: Math.min(grab.endDay, axis.length) };
             }
 
-            /** Прямокутник для привида. Колонки дробові: він рахує пікселі. */
+            /** The rectangle for the ghost. Columns are fractional: it counts pixels. */
             function rect(from: number, to: number, resourceIndex: number): Target {
                 const axis = dayAxis(ctx.getLayout());
                 return {
@@ -177,10 +180,10 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             /**
-             * Що вийде з цієї цілі. Чисті функції, бо потрібні двічі: спершу
-             * щоб спитати дозволу під час руху, потім щоб віддати результат.
-             * Порахувати двома різними шляхами означало б рано чи пізно
-             * дозволити одне, а застосувати інше.
+             * What this target will come to. Pure functions, because they are
+             * needed twice: first to ask for permission during the movement,
+             * then to hand over the result. Computing along two different paths
+             * would sooner or later allow one thing and apply another.
              */
             function moveOf(grab: Grab<R, I>, target: Target): DragMove<R, I> | null {
                 const layout = ctx.getLayout();
@@ -202,13 +205,14 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             /**
-             * Розтягування рахується в днях і від меж самого елемента, а не
-             * від видимих колонок. Інакше при кроці "week" край не мав куди
-             * зрушити всередині тижня, а перестрибнувши його — вивертав подію
-             * навиворіт: кінець опинявся раніше за початок.
+             * Stretching is counted in days and from the item's own bounds, not
+             * from the visible columns. Otherwise at the "week" step an edge had
+             * nowhere to move inside a week, and once it jumped one it turned
+             * the event inside out: the end landed before the start.
              *
-             * Мінімум — один день, і це не порада, а межа контракту: `end`
-             * ексклюзивний, тож подія, коротша за день, не існує.
+             * The minimum is one day, and that is not advice but the edge of the
+             * contract: `end` is exclusive, so an event shorter than a day does
+             * not exist.
              */
             function resizeOf(grab: Grab<R, I>, target: Target): DragResize<R, I> | null {
                 if (grab.edge === null) return null;
@@ -237,7 +241,7 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 };
             }
 
-            /** Чи ціль узагалі відрізняється від того, що вже є. */
+            /** Whether the target differs from what is already there at all. */
             function changed(grab: Grab<R, I>, target: Target): boolean {
                 const axis = dayAxis(ctx.getLayout());
                 const box = visible(grab);
@@ -266,8 +270,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         if (grab === undefined || hit === null) return null;
 
                         const edge = edgeAt(bar, event.clientX, event.pointerType === "touch");
-                        // Жест без обробника не починається: тягнути бар, який
-                        // нікуди не поїде, гірше, ніж не тягнути його зовсім.
+                        // A gesture with no handler does not start: dragging a
+                        // bar that will go nowhere is worse than not dragging
+                        // it at all.
                         if (edge === null && options.onMove === undefined) return null;
 
                         const axis = dayAxis(ctx.getLayout());
@@ -279,8 +284,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                             axis.perSlot,
                         );
 
-                        // Привид знає, чиє він відображення: висоту й місце в
-                        // рядку бере з бара, який тягнуть.
+                        // The ghost knows whose reflection it is: it takes its
+                        // height and its place in the row from the bar being
+                        // dragged.
                         ghost.fit(bar);
                         return grab;
                     },
@@ -294,28 +300,28 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         const box = visible(grab);
 
                         if (grab.edge === "start") {
-                            // День мінімум: край не може перескочити протилежний.
+                            // One day minimum: an edge cannot jump past the opposite one.
                             const next = clamp(day, 0, grab.endDay - 1);
                             return rect(next, box.to, grab.resourceIndex);
                         }
 
                         if (grab.edge === "end") {
-                            // Кінець ексклюзивний, тож день під вказівником
-                            // ще входить у подію — звідси +1.
+                            // The end is exclusive, so the day under the pointer
+                            // is still part of the event - hence the +1.
                             const next = clamp(day + 1, grab.startDay + 1, axis.length);
                             return rect(box.from, next, grab.resourceIndex);
                         }
 
-                        // Переїзд: бар, вивезений за край осі, не коротшає —
-                        // він просто впирається.
+                        // A move: a bar carried past the edge of the axis does
+                        // not get shorter - it simply comes up against it.
                         const span = box.to - box.from;
                         const next = clamp(day - (grab.grabDay - box.from), 0, axis.length - span);
                         return rect(next, next + span, hit.resourceIndex);
                     },
 
                     validate(grab, target) {
-                        // Повернення на своє місце забороняти нема за що:
-                        // жест просто нічого не зробить.
+                        // There is nothing to forbid about returning to the same
+                        // place: the gesture will simply do nothing.
                         if (!changed(grab, target)) return true;
 
                         if (grab.edge === null) {
@@ -345,13 +351,15 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             );
 
             /**
-             * Те саме, що жест, але з клавіатури. Без цього все, що вміє миша,
-             * для клавіатури просто не існує — а це вже не незручність, а
-             * недоступність: користувач бачить бар, чує його ім'я й не може
-             * зробити з ним нічого.
+             * The same as a gesture, but from the keyboard. Without this,
+             * everything the mouse can do simply does not exist for the
+             * keyboard - and that is no longer an inconvenience but
+             * inaccessibility: the user sees a bar, hears its name and can do
+             * nothing with it.
              *
-             * Shift — увесь бар, Alt — його край: та сама пара, що середина й
-             * край під вказівником. Голі стрілки не наші, ними ходить фокус.
+             * Shift moves the whole bar, Alt drags its edge: the same pair as
+             * the middle and the edge under the pointer. Bare arrows are not
+             * ours - focus travels by them.
              */
             function onKeydown(event: KeyboardEvent) {
                 if (!event.shiftKey && !event.altKey) return;
@@ -374,8 +382,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 if (event.altKey) {
                     if (options.onResize === undefined || days === 0) return;
 
-                    // День — мінімум, край осі — межа: ті самі правила, що й у
-                    // жесті, і так само в днях, а не в колонках.
+                    // One day minimum, the edge of the axis the limit: the same
+                    // rules as in the gesture, and likewise in days rather than
+                    // in columns.
                     const next = box.to + days;
                     if (next <= grab.startDay || next > axis.length) return;
 

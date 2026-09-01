@@ -1,10 +1,11 @@
 /**
- * Навігація по періодах. Живе поза компонентом навмисне: компонент
- * контрольований (рішення 04), тож діапазоном володіє застосунок, а не таймлайн.
+ * Navigation across periods. It lives outside the component on purpose: the
+ * component is controlled (decision 04), so the range belongs to the
+ * application rather than to the timeline.
  *
- * Дані вантажаться не звідси, а з події `range-change` компонента: при
- * тижневому кроці вісь ширша за заданий діапазон, і завантажувати треба саме
- * те, що видно.
+ * Data is not loaded from here but from the component's `range-change` event:
+ * at the week step the axis is wider than the range asked for, and what has to
+ * be loaded is exactly what is visible.
  */
 
 import { computed, ref, type ComputedRef, type Ref } from "vue";
@@ -14,22 +15,22 @@ import type { DateRange, IsoDate } from "../core/types";
 export type RangeUnit = "month" | "week" | "day";
 
 export interface UseTimelineRangeOptions {
-    /** Чим рухають prev/next. За замовчуванням "month". */
+    /** What prev/next move by. Defaults to "month". */
     unit?: RangeUnit;
-    /** Скільки одиниць у вікні. За замовчуванням 1. */
+    /** How many units fit in the window. Defaults to 1. */
     count?: number;
-    /** Початковий якір; за замовчуванням сьогодні. */
+    /** The initial anchor; defaults to today. */
     date?: IsoDate;
-    /** Для unit: "week". За замовчуванням 1 (понеділок). */
+    /** For unit: "week". Defaults to 1 (Monday). */
     weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-    /** Локаль заголовка. За замовчуванням системна. */
+    /** The locale of the title. Defaults to the system one. */
     locale?: string;
-    /** Власний заголовок замість типового. */
+    /** A title of your own instead of the standard one. */
     formatTitle?: (range: DateRange, unit: RangeUnit) => string;
 }
 
 export interface UseTimelineRange {
-    /** Дата, навколо якої будується вікно. */
+    /** The date the window is built around. */
     anchor: Ref<IsoDate>;
     range: ComputedRef<DateRange>;
     title: ComputedRef<string>;

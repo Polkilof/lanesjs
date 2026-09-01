@@ -1,15 +1,16 @@
 /**
- * Спільна механіка платних жестів: натиснули, провезли більше за поріг, ведемо,
- * відпустили. Кожен жест відрізняється лише чотирма відповідями — чи брати
- * початок, куди веде вказівник, чи там можна відпустити і що робити далі.
+ * The mechanics shared by the paid gestures: pressed, travelled past the
+ * threshold, kept going, released. A gesture differs only in four answers -
+ * whether to take the start, where the pointer leads, whether it may be
+ * released there, and what to do next.
  *
- * Винесено, бо перетягування й створення виділенням однакові в усьому, крім
- * цих відповідей, а розкладені по різних плагінах вони мають бути:
- * застосунок може дозволити створювати, не дозволяючи тягати.
+ * Pulled out because dragging and select-to-create are identical in everything
+ * but those answers, while they do have to live in separate plugins: an
+ * application may allow creating without allowing dragging.
  */
 import type { Geometry } from "../core/types";
 
-/** Прямокутник, який показує привид; усі жести зводяться до нього. */
+/** The rectangle the ghost shows; every gesture comes down to it. */
 export interface Target {
     slotIndex: number;
     slotSpan: number;
@@ -19,20 +20,21 @@ export interface Target {
 export interface Ghost {
     show(target: Target, geometry: Geometry, valid: boolean): void;
     /**
-     * Приміряти привида до бара, який узяли: він стане тієї ж висоти й на тому
-     * самому місці в рядку, а сам бар пригасне — але аж тоді, коли жест
-     * справді почнеться.
+     * Fit the ghost to the bar that was grabbed: it takes the same height and
+     * the same place in the row, and the bar itself dims - but only once the
+     * gesture has really begun.
      */
     fit(bar: HTMLElement): void;
     remove(): void;
 }
 
 /**
- * Привид у шарі накладок. Інлайном лишається тільки те, без чого він опиниться
- * не там: позиція й прозорість для вказівника. Вигляд — у таблиці стилів
- * компонента, під токенами --rt-ghost-*: інлайн б'є будь-який селектор, тож
- * поки колір стояв тут, застосунок не міг перефарбувати привида взагалі, і
- * обіцяний плагінами className лишався наполовину порожньою обіцянкою.
+ * The ghost in the overlay layer. Only what it would end up in the wrong place
+ * without stays inline: position and transparency to the pointer. Its
+ * appearance lives in the component stylesheet, under the --rt-ghost-* tokens:
+ * inline beats any selector, so while the colour sat here an application could
+ * not recolour the ghost at all, and the className the plugins promised stayed
+ * a half-empty promise.
  */
 export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
     let element: HTMLElement | null = null;
@@ -52,9 +54,9 @@ export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
                 element.style.cssText = "position:absolute;pointer-events:none";
                 overlay.appendChild(element);
 
-                // Бар гасне тут, а не в fit: приміряються на натисканні, а
-                // жест починається порогом руху або утриманням. Інакше кожне
-                // натискання на бар давало б блимання.
+                // The bar dims here rather than in fit: fitting happens on the
+                // press, while the gesture begins on the movement threshold or
+                // on a hold. Otherwise every click on a bar would flash.
                 source?.classList.add("rt__bar--dragging");
             }
 
@@ -64,17 +66,19 @@ export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
             element.style.left = `${target.slotIndex * geometry.slotWidth}px`;
             element.style.width = `${target.slotSpan * geometry.slotWidth}px`;
 
-            // Привид повторює силует бара, а не всю смугу рядка: прямокутник
-            // удвічі вищий за те, що тягнуть, показує рядок, а не місце. Там,
-            // де бара немає — виділення на порожньому, — смуга рядка якраз
-            // доречна; нульова висота означає середовище без розкладки
-            // (jsdom), і там теж береться рядок.
+            // The ghost repeats the silhouette of the bar rather than the whole
+            // row band: a rectangle twice as tall as the thing being dragged
+            // shows the row, not the place. Where there is no bar - a selection
+            // on empty space - the row band is exactly right; zero height means
+            // an environment without layout (jsdom), and there the row is taken
+            // as well.
             const fitted = box !== null && box.height > 0;
             element.style.top = `${top + (fitted && box !== null ? box.top : 0)}px`;
             element.style.height = `${fitted && box !== null ? box.height : rowHeight}px`;
 
-            // Заборонену ціль видно одразу, а не після відпускання: інакше
-            // жест мовчки нічого не робить, і це читається як поламане.
+            // A forbidden target is visible at once rather than after release:
+            // otherwise the gesture silently does nothing, and that reads as
+            // broken.
             element.classList.toggle("rt__ghost--invalid", !valid);
         },
 
@@ -88,61 +92,65 @@ export function makeGhost(overlay: HTMLElement, className?: string): Ghost {
     };
 }
 
-/** Скільки тримати палець, перш ніж жест почнеться на дотик. */
+/** How long to hold a finger before a touch gesture begins. */
 const LONG_PRESS = 400;
 
-/** Наскільки палець може поїхати за час утримання й це ще не прокрутка. */
+/** How far a finger may travel during the hold and still not be a scroll. */
 const TOUCH_SLOP = 10;
 
 export interface PointerGesture<S> {
     root: HTMLElement;
     /**
-     * Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. Без
-     * порога кожен клік починав би тягнення, і клік зникав би.
+     * How many pixels to travel before this counts as a gesture. Without a
+     * threshold every click would start a drag, and the click would disappear.
      */
     threshold: number;
     /**
-     * Скільки тримати палець, щоб жест почався на дотик. Поріг руху там не
-     * годиться — чому саме, розказано над `trackPointer`.
+     * How long to hold a finger for a touch gesture to begin. A movement
+     * threshold does not do there - why exactly is explained above
+     * `trackPointer`.
      */
     longPress?: number;
-    /** Взяти початок жесту або відмовитись. */
+    /** Take the start of the gesture, or refuse it. */
     press(event: PointerEvent): S | null;
-    /** Куди веде вказівник зараз; null — лишити попереднє. */
+    /** Where the pointer leads right now; null keeps the previous answer. */
     track(state: S, event: PointerEvent): Target | null;
     /**
-     * Чи можна тут відпустити. Заборонена ціль показується перекресленою, але
-     * не застосовується: користувач має бачити межу правила під час жесту, а
-     * не дізнаватись про неї з мовчання.
+     * Whether it may be released here. A forbidden target is shown crossed out
+     * but not applied: the user should see the edge of the rule during the
+     * gesture rather than learn about it from silence.
      */
     validate?(state: S, target: Target): boolean;
-    /** Відпустили. Викликається лише для дозволеної цілі. */
+    /** Released. Called only for an allowed target. */
     commit(state: S, target: Target): void;
 }
 
 /**
- * Підписка на вказівник; повертає функцію зняття. Рух і відпускання слухаємо
- * на вікні, а не на корені: жест не має уриватись, щойно курсор вийшов за межі
- * таблиці — саме туди його й ведуть, коли тягнуть до краю.
+ * Subscribing to the pointer; returns the teardown function. Movement and
+ * release are listened for on the window rather than on the root: a gesture
+ * must not break off the moment the cursor leaves the table - that is exactly
+ * where it is led when something is dragged to the edge.
  *
- * Миша й палець починають жест по-різному, і це не примха. Мишею його починає
- * рух: поріг у кілька пікселів відрізняє тягнення від кліку. Пальцем той самий
- * рух першим забирає браузер — він з нього починає прокрутку, а нам шле
- * `pointercancel`, і жест уривається, ще не почавшись. Тому на дотик його
- * починає утримання: палець стоїть, прокрутка не почалась, і поки не почалась,
- * її ще можна відхилити — `preventDefault` на `touchmove`. Потім уже нема чого
- * відхиляти: подія приходить із `cancelable: false`.
+ * A mouse and a finger begin a gesture differently, and that is not a whim.
+ * With a mouse, movement begins it: a threshold of a few pixels separates a
+ * drag from a click. With a finger, that same movement is taken first by the
+ * browser - it starts scrolling from it and sends us `pointercancel`, and the
+ * gesture is cut off before it began. So on touch a hold begins it: the finger
+ * is still, scrolling has not started, and while it has not started it can
+ * still be refused - `preventDefault` on `touchmove`. After that there is
+ * nothing left to refuse: the event arrives with `cancelable: false`.
  *
- * Чому не `touch-action: none` на барах, як роблять половина таких
- * компонентів: тоді пальцем не прокрутити таблицю, почавши з бара, а бар
- * накриває піврядка. Правило CSS не вміє «не заважати, поки не тримають».
+ * Why not `touch-action: none` on bars, the way half of such components do:
+ * then the table could not be scrolled with a finger starting from a bar, and a
+ * bar covers half a row. A CSS rule cannot say "stay out of the way until they
+ * hold".
  */
 export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geometry: () => Geometry): () => void {
     const { root, threshold } = gesture;
     const longPress = gesture.longPress ?? LONG_PRESS;
 
     let state: S | null = null;
-    /** jsdom не має PointerEvent, тож ідентифікатора може не бути зовсім. */
+    /** jsdom has no PointerEvent, so there may be no id at all. */
     let pointerId: number | null = null;
     let touch = false;
     let origin = { x: 0, y: 0 };
@@ -150,12 +158,12 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
     let target: Target | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    /** Поки жест веде палець, прокрутка сторінки — не те, чого від нього хочуть. */
+    /** While a finger is leading a gesture, scrolling the page is not what is wanted. */
     function blockScroll(event: TouchEvent) {
         if (event.cancelable) event.preventDefault();
     }
 
-    /** Не наш вказівник: другий палець у чужий жест не втручається. */
+    /** Not our pointer: a second finger does not interfere with someone else's gesture. */
     function foreign(event: PointerEvent): boolean {
         return pointerId !== null && event.pointerId !== pointerId;
     }
@@ -175,9 +183,9 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
     }
 
     /**
-     * Показати, куди веде вказівник. `take` — чи брати цю ціль як результат:
-     * саме утримання ще нічого не змінює, змінює рух. Інакше палець,
-     * притиснутий і відпущений на місці, робив би те, чого миша не робить.
+     * Show where the pointer leads. `take` says whether to keep this target as
+     * the result: a hold on its own changes nothing, movement does. Otherwise a
+     * finger pressed and released in place would do what a mouse does not.
      */
     function show(event: PointerEvent, take: boolean) {
         if (state === null) return;
@@ -185,8 +193,8 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
         const next = gesture.track(state, event);
         if (next === null) return;
 
-        // Заборонену ціль показуємо, але не запам'ятовуємо: відпускання на ній
-        // не має застосуватись, а повернення на дозволену — має спрацювати.
+        // A forbidden target is shown but not remembered: releasing on it must
+        // not apply, while returning to an allowed one must still work.
         const valid = gesture.validate?.(state, next) ?? true;
         if (take) target = valid ? next : null;
         ghost.show(next, geometry(), valid);
@@ -194,7 +202,7 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
 
     function begin(event: PointerEvent, moved: boolean) {
         active = true;
-        // Інакше тягнення виділяє підписи барів і рядків
+        // Otherwise dragging selects the labels of bars and rows
         root.style.userSelect = "none";
         if (touch) window.addEventListener("touchmove", blockScroll, { passive: false });
         show(event, moved);
@@ -223,8 +231,8 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
         if (!active) {
             const moved = Math.abs(event.clientX - origin.x) + Math.abs(event.clientY - origin.y);
 
-            // Палець поїхав, не дочекавшись кінця утримання, — це прокрутка, і
-            // забирати її в користувача ми не станемо.
+            // The finger moved before the hold was over - that is a scroll, and
+            // we are not going to take it away from the user.
             if (touch) {
                 if (moved > TOUCH_SLOP) reset();
                 return;
@@ -249,15 +257,15 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
     }
 
     /**
-     * Скасування — не відпускання: вказівник забрав собі браузер, і
-     * застосовувати те, чого користувач не завершив, підстав немає.
+     * A cancel is not a release: the browser took the pointer for itself, and
+     * there is no ground for applying what the user did not finish.
      */
     function onPointerCancel(event: PointerEvent) {
         if (state === null || foreign(event)) return;
         reset();
     }
 
-    /** Довге утримання на дотик інакше відкриває меню просто поверх жесту. */
+    /** A long hold on touch would otherwise open the menu right on top of the gesture. */
     function onContextMenu(event: Event) {
         if (state !== null && touch) event.preventDefault();
     }

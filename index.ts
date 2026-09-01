@@ -1,13 +1,13 @@
 /**
- * Точка входу безкоштовної половини: компонент, вісь часу й розкладка.
+ * Entry point of the free half: the component, the time axis and the layout.
  *
- * Експортуємо саме те, що обіцяємо тримати сумісним. `core/date` іде цілком,
- * хоч половина його потрібна лише розкладці: він крихітний і чистий, а
- * лишений усередині змушує кожного, кому треба посунути дату, переписати його
- * в себе.
+ * What is exported here is exactly what we promise to keep compatible.
+ * `core/date` goes out whole, even though half of it is only needed by the
+ * layout: it is tiny and pure, and keeping it inside would make everyone who
+ * needs to shift a date write their own copy.
  *
- * Платного тут немає: `pro/` — окрема точка входу, і вниз по імпортах вона не
- * тягнеться (див. BRIEF.md, правило теки).
+ * Nothing paid lives here: `pro/` is a separate entry point, and nothing in
+ * this tree imports it.
  */
 export { default as Timeline } from "./vue/Timeline.vue";
 

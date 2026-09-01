@@ -1,28 +1,31 @@
 /**
- * Ліцензійний ключ. Рішення 08: код їде разом, працює без ключа, купують за
- * переконанням — тож перевірка тут нічого не вимикає й не ламає. Вона лише
- * каже вголос, чим користуються: раз у консоль і маленькою позначкою в кутку.
+ * The licence key. Decision 08: the code ships together, works without a key,
+ * and is bought out of conviction - so the check here disables nothing and
+ * breaks nothing. It only says out loud what is being used: once in the console
+ * and with a small badge in the corner.
  *
- * Ключ підписаний, а не звірений із таблицею: у пакет їде тільки публічний
- * ключ, тож кейгена не існує навіть у того, хто має весь наш код. Перевірка
- * офлайн — жодного звернення до нас; хто купив компонент, не купував нагляду.
+ * The key is signed rather than checked against a table: only the public key
+ * ships in the package, so no keygen exists even for someone holding all our
+ * code. The check is offline - nothing is sent to us; whoever bought the
+ * component did not buy surveillance.
  *
- * Що ключ обмежує — вікно оновлень, а не роботу. Дату кінця порівнюємо з
- * датою збірки пакета, а не з годинником: куплена версія працює вічно, а
- * випущена після кінця вікна просить поновити. Годинник клієнта тут не
- * суддя — його переводять, і в обидва боки.
+ * What the key limits is the update window, not the work. The end date is
+ * compared against the build date of the package rather than against a clock:
+ * the version you bought works forever, while one released after the window
+ * closed asks you to renew. The client's clock is no judge here - clocks get
+ * changed, in both directions.
  */
 
 /**
- * Публічний ключ пакета (SPKI, base64url). Приватний — поза репозиторієм;
- * видача ключів у scripts/lanes-license.mjs.
+ * The package's public key (SPKI, base64url). The private one lives outside the
+ * repository; keys are issued by scripts/lanes-license.mjs.
  */
 const PUBLIC_KEY =
     "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsoP0L5MEn0YDDwX6QCaqRiPdgqftDdW-HlbbwlRoFSaaKtJu1832nmd5J-DwTuMECjuBeQ8cs1x-LC7BOMUcOw";
 
-// Підставляє збірка бібліотеки. Коли Lanes живиться вихідниками — а так
-// живемо ми самі — їх немає, і вікно оновлень не перевіряється: власну збірку
-// не ліцензують.
+// Substituted by the library build. When Lanes is fed from sources - which is
+// how we live ourselves - they are absent, and the update window is not checked:
+// your own build is not licensed.
 declare const __LANES_VERSION__: string;
 declare const __LANES_BUILT__: string;
 
@@ -30,22 +33,22 @@ const VERSION = typeof __LANES_VERSION__ === "string" ? __LANES_VERSION__ : "";
 const BUILT = typeof __LANES_BUILT__ === "string" ? __LANES_BUILT__ : "";
 
 export type LicenseStatus =
-    /** Ключа не давали. */
+    /** No key was given. */
     | "unlicensed"
-    /** Ключ наш і покриває цю збірку. */
+    /** The key is ours and covers this build. */
     | "licensed"
-    /** Ключ наш, але вікно оновлень скінчилось раніше за цю збірку. */
+    /** The key is ours, but its update window ended before this build. */
     | "outdated"
-    /** Ключ не наш або зіпсований. */
+    /** The key is not ours, or is corrupted. */
     | "invalid"
-    /** Немає чим перевірити (незахищений контекст) — і ми мовчимо. */
+    /** Nothing to verify with (an insecure context) - and we keep quiet. */
     | "unverifiable";
 
 export interface License {
     id: string;
     licensee: string;
     edition: string;
-    /** Доки покривають оновлення, РРРР-ММ-ДД. */
+    /** How long updates are covered for, YYYY-MM-DD. */
     updatesUntil: string;
 }
 
@@ -73,9 +76,9 @@ function looksLikeLicense(value: unknown): value is License {
 }
 
 /**
- * Перевірка ключа. Винесена окремо й параметризована навмисно: інакше її
- * можна було б перевірити хіба що справжнім ключем, а справжній ключ у тестах
- * означав би справжній приватний ключ у репозиторії.
+ * Verifying a key. Pulled out and parameterized deliberately: otherwise the
+ * only way to test it would be with a real key, and a real key in the tests
+ * would mean a real private key in the repository.
  */
 export async function verifyLicense(
     key: string,
@@ -87,8 +90,8 @@ export async function verifyLicense(
     const parts = key.trim().split(".");
     if (parts.length !== 3 || parts[0] !== "LANES") return { status: "invalid", license: null };
 
-    // Незахищений контекст (звичайний http) crypto.subtle не дає. Це не привід
-    // звинувачувати того, хто заплатив: без перевірки ми просто мовчимо.
+    // An insecure context (plain http) does not give crypto.subtle. That is no
+    // reason to accuse someone who paid: with no check, we simply keep quiet.
     const subtle = globalThis.crypto?.subtle;
     if (subtle === undefined) return { status: "unverifiable", license: null };
 
@@ -121,7 +124,7 @@ export async function verifyLicense(
 
     if (!signed) return { status: "invalid", license: null };
 
-    // Дати ISO порівнюються як рядки — на те й формат.
+    // ISO dates compare as strings - that is what the format is for.
     if (builtAt !== "" && license.updatesUntil < builtAt) return { status: "outdated", license };
 
     return { status: "licensed", license };
@@ -130,27 +133,29 @@ export async function verifyLicense(
 let checking: Promise<LicenseCheck> = Promise.resolve({ status: "unlicensed", license: null });
 
 /**
- * Віддати ключ бібліотеці. Викликати до того, як з'явиться перший таймлайн з
- * платними плагінами; спізнитись на секунду не страшно — стільки їй і дано.
+ * Hand the key to the library. Call it before the first timeline with paid
+ * plugins appears; being a second late is harmless - a second is exactly what
+ * it is given.
  */
 export function setLicense(key: string): void {
     checking = verifyLicense(key);
 }
 
-/** Чим усе скінчилось. Потрібне хіба що нам самим і тестам. */
+/** How it turned out. Needed by us and by the tests, hardly by anyone else. */
 export function licenseStatus(): Promise<LicenseCheck> {
     return checking;
 }
 
-/** Скільки чекати на ключ, перш ніж вирішити, що його не буде. */
+/** How long to wait for a key before deciding there will not be one. */
 const GRACE = 1000;
 
 /**
- * Куди йти по ключ. Єдина адреса в бібліотеці — і та лише в тексті.
+ * Where to go for a key. The only address in the library - and even that one
+ * lives in text alone.
  *
- * Сторінка проєкту, а не репозиторій: вона й продає. Своїм доменом її можна
- * підмінити пізніше, не ламаючи вже опублікованих версій — GitHub Pages сам
- * перенаправляє стару адресу на новий домен.
+ * The project page rather than the repository: the page is what sells. It can
+ * be replaced with a domain of our own later without breaking already published
+ * versions - GitHub Pages redirects the old address to the new domain itself.
  */
 const HOME = "https://polkilof.github.io/lanesjs/";
 
@@ -175,7 +180,7 @@ const BADGE: Record<string, string> = {
 let announced = false;
 
 interface Watch {
-    /** Скільки платних плагінів стоїть на цьому таймлайні. */
+    /** How many paid plugins are installed on this timeline. */
     count: number;
     timer: ReturnType<typeof setTimeout> | null;
     badge: HTMLElement | null;
@@ -184,8 +189,8 @@ interface Watch {
 const watched = new Map<HTMLElement, Watch>();
 
 /**
- * Позначку малює платний шар і тільки платний: безкоштовна половина про
- * ліцензію не знає нічого — інакше її не зібрати окремо (правило теки).
+ * The badge is drawn by the paid layer and only by it: the free half knows
+ * nothing about the licence - otherwise it could not be built separately.
  */
 function mark(root: HTMLElement, status: LicenseStatus): HTMLElement {
     const badge = document.createElement("div");
@@ -210,9 +215,9 @@ function mark(root: HTMLElement, status: LicenseStatus): HTMLElement {
 }
 
 /**
- * Ввімкнути перевірку для одного таймлайна; повертає зняття. Кличе кожен
- * платний плагін, а позначка й повідомлення — одні на всіх: чотири плагіни на
- * одному екрані не привід кричати чотири рази.
+ * Turn the check on for one timeline; returns the teardown. Every paid plugin
+ * calls it, while the badge and the message are one per timeline: four plugins
+ * on one screen are no reason to shout four times.
  */
 export function guard(root: HTMLElement | null): () => void {
     if (root === null || typeof document === "undefined") return () => {};
@@ -221,8 +226,9 @@ export function guard(root: HTMLElement | null): () => void {
     watch.count += 1;
     watched.set(root, watch);
 
-    // Ключ часто дають після монтування — застосунок міг тягти його з
-    // конфігу. Секунда мовчання дешевша за хибне звинувачення.
+    // The key often arrives after mounting - the application may have been
+    // fetching it from config. A second of silence costs less than a false
+    // accusation.
     if (watch.timer === null && watch.badge === null) {
         watch.timer = setTimeout(() => void settle(root), GRACE);
     }
@@ -241,7 +247,7 @@ async function settle(root: HTMLElement): Promise<void> {
     const { status, license } = await checking;
 
     const watch = watched.get(root);
-    // Таймлайн могли зняти, поки ми перевіряли.
+    // The timeline may have been unmounted while we were checking.
     if (watch === undefined) return;
     watch.timer = null;
 

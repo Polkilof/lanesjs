@@ -1,13 +1,14 @@
 /**
- * Створення виділенням: провести по порожньому місцю рядка й дістати діапазон.
- * Окремий плагін від перетягування, бо починається з іншого — з порожнього
- * місця, а не з бара. Тож вони не б'ються за один захват, і застосунок може
- * дозволити створювати, не дозволяючи тягати.
+ * Select-to-create: drag across an empty stretch of a row and get a range back.
+ * A separate plugin from dragging, because it starts from something else - from
+ * empty space rather than from a bar. So the two do not fight over one grab, and
+ * an application can allow creating without allowing dragging.
  *
- * Плагін нічого не створює сам: він рахує діапазон і віддає його застосунку.
- * Той сам вирішує, чи відкривати форму, чи одразу писати в базу.
+ * The plugin creates nothing itself: it computes the range and hands it to the
+ * application, which decides whether to open a form or write straight to the
+ * database.
  *
- * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
+ * The `pro/` folder imports from `core/` and `vue/`; never the other way round.
  */
 import { clamp, dayAxis, dayUnder } from "./days";
 import { guard } from "./license";
@@ -17,32 +18,32 @@ import type { IsoDate, Plugin, PluginContext, Resource } from "../core/types";
 
 export interface DragCreate<R = unknown> {
     resource: Resource<R>;
-    /** Межі виділеного; `end` ексклюзивний, як і всюди в контракті. */
+    /** The bounds of the selection; `end` is exclusive, as everywhere in the contract. */
     start: IsoDate;
     end: IsoDate;
-    /** Скільки днів укрито. */
+    /** How many days are covered. */
     days: number;
 }
 
 export interface CreateOptions<R = unknown> {
     onCreate: (created: DragCreate<R>) => void;
     /**
-     * Чи дозволено таке виділення. Питається на кожному русі, тож заборонений
-     * діапазон видно ще під час жесту. Класичне правило — не перетинати те,
-     * що вже лежить у рядку.
+     * Whether such a selection is allowed. Asked on every movement, so a
+     * forbidden range is visible while the gesture is still going. The classic
+     * rule is not to cross what already lies in the row.
      */
     canCreate?: (created: DragCreate<R>) => boolean;
-    /** Клас на привида — щоб застосунок оформив його по-своєму. */
+    /** A class on the ghost - so the application can style it its own way. */
     className?: string;
-    /** Скільки пікселів треба провезти, перш ніж це вважатиметься жестом. */
+    /** How many pixels to travel before this counts as a gesture. */
     threshold?: number;
-    /** Скільки тримати палець, щоб жест почався на дотик; типово 400 мс. */
+    /** How long to hold a finger for a touch gesture to begin; 400 ms by default. */
     longPress?: number;
 }
 
-/** Звідки почали тягнути. Рядок фіксується на старті й далі не змінюється. */
+/** Where the drag started. The row is fixed at the start and never changes. */
 interface Anchor {
-    /** День осі, а не колонка: виділення має вміти починатись із середи. */
+    /** An axis day, not a column: a selection must be able to start on a Wednesday. */
     day: number;
     resourceIndex: number;
 }
@@ -61,14 +62,14 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
             const ghost = makeGhost(overlay, options.className);
 
             /**
-             * Що вийде з цього виділення. Одна функція на дозвіл і на
-             * результат: порахувати двома шляхами означало б рано чи пізно
-             * дозволити одне, а створити інше.
+             * What this selection will come to. One function for the permission
+             * and for the result: computing it along two paths would sooner or
+             * later allow one thing and create another.
              *
-             * Рахуємо в днях, а не в колонках: при кроці "week" колонка накриває
-             * сім днів, і виділення в колонках уміло б починатись лише з
-             * понеділка, а days рапортувало б кількість тижнів під виглядом
-             * кількості днів.
+             * Counted in days rather than columns: at the "week" step a column
+             * covers seven days, so a selection measured in columns could only
+             * ever start on a Monday, and `days` would report a number of weeks
+             * disguised as a number of days.
              */
             function rangeOf(anchor: Anchor, target: Target): DragCreate<R> | null {
                 const layout = ctx.getLayout();
@@ -91,8 +92,8 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                     longPress: options.longPress,
 
                     press(event) {
-                        // По бару створювати не можна: там уже щось лежить, і
-                        // цей захват належить перетягуванню.
+                        // Creating on top of a bar is not allowed: something is
+                        // already there, and that grab belongs to dragging.
                         if ((event.target as HTMLElement).closest(".rt__bar") !== null) return null;
 
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
@@ -115,9 +116,9 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                             axis.length - 1,
                         );
 
-                        // Рядок беремо з початку жесту: подія належить одному
-                        // ресурсу, і вести виділення по діагоналі — значить
-                        // питати, що ж воно тоді покриває.
+                        // The row is taken from the start of the gesture: an
+                        // event belongs to one resource, and leading a selection
+                        // diagonally would mean asking what it covers then.
                         const from = Math.min(anchor.day, day);
                         const to = Math.max(anchor.day, day) + 1;
 

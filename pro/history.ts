@@ -1,37 +1,39 @@
 /**
- * Скасувати й повторити для жестів. Плагін не володіє даними — отже, не може
- * знати, як їх повернути. Тому застосунок кладе в стек пару замикань: як
- * відкотити і як повторити. Це єдиний чесний варіант при керованому
- * компоненті, і заразом найгнучкіший: у стек лягає будь-яка дія застосунку,
- * не лише наші жести.
+ * Undo and redo for gestures. The plugin does not own the data, so it cannot
+ * know how to put it back. The application therefore puts a pair of closures on
+ * the stack: how to undo and how to redo. That is the only honest option with a
+ * controlled component, and at the same time the most flexible one - any action
+ * of the application can go on the stack, not only our gestures.
  *
- * Плагін і є ручкою: об'єкт, який передають у `plugins`, має ще й методи
- * стека. Так застосунку не треба тримати два посилання на одне й те саме.
+ * The plugin is the handle: the object passed into `plugins` also carries the
+ * stack methods. That way the application does not have to keep two references
+ * to one thing.
  *
- * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
+ * The `pro/` folder imports from `core/` and `vue/`; never the other way round.
  */
 import { guard } from "./license";
 import type { Plugin } from "../core/types";
 
 export interface HistoryEntry {
-    /** Людська назва — для підказки на кнопці. */
+    /** A human-readable name - for the tooltip on a button. */
     label?: string;
     undo(): void;
     redo(): void;
 }
 
 export interface HistoryOptions {
-    /** Скільки кроків тримати; найдавніші випадають. */
+    /** How many steps to keep; the oldest ones fall off. */
     limit?: number;
     /**
-     * Гарячі клавіші Ctrl/Cmd+Z і Ctrl/Cmd+Shift+Z. Вимкніть, якщо застосунок
-     * має власні: слухач висить на вікні, і два стеки на одні клавіші —
-     * гарантована плутанина.
+     * The Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z shortcuts. Turn them off if the
+     * application has its own: the listener sits on the window, and two stacks
+     * on the same keys are guaranteed confusion.
      */
     keys?: boolean;
     /**
-     * Стек змінився. Плагін навмисно не тягне реактивність фреймворка, тож
-     * кнопки «скасувати» застосунок оновлює сам.
+     * The stack changed. The plugin deliberately does not pull in the
+     * framework's reactivity, so the application updates its undo buttons
+     * itself.
      */
     onChange?: () => void;
 }
@@ -54,7 +56,7 @@ export function history<R = unknown, I = unknown>(options: HistoryOptions = {}):
         past.push(entry);
         if (past.length > limit) past.shift();
 
-        // Нова дія обриває майбутнє: повторювати після неї нема чого
+        // A new action cuts the future off: there is nothing left to redo
         future.length = 0;
         options.onChange?.();
     }
@@ -86,9 +88,9 @@ export function history<R = unknown, I = unknown>(options: HistoryOptions = {}):
     }
 
     /**
-     * Клавіші слухаються на вікні, бо таблиця не фокусується. Поля вводу
-     * пропускаємо: там Ctrl+Z належить браузеру, і забрати його — найшвидший
-     * спосіб зіпсувати форму поруч із таблицею.
+     * Keys are listened for on the window, because the table takes no focus.
+     * Input fields are skipped: there Ctrl+Z belongs to the browser, and taking
+     * it away is the fastest way to break a form standing next to the table.
      */
     function onKeyDown(event: KeyboardEvent) {
         if (!event.ctrlKey && !event.metaKey) return;
@@ -101,16 +103,16 @@ export function history<R = unknown, I = unknown>(options: HistoryOptions = {}):
         const isUndo = key === "z" && !event.shiftKey;
         if (!isRedo && !isUndo) return;
 
-        // preventDefault лише тоді, коли справді щось зробили: порожній стек
-        // не має ковтати скасування в застосунку навколо.
+        // preventDefault only when something was actually done: an empty stack
+        // must not swallow undo in the application around us.
         if ((isRedo ? redo() : undo()) !== null) event.preventDefault();
     }
 
     return {
         name: "history",
         setup(ctx) {
-            // Стек — теж платна поведінка, тож перевірка не залежить від
-            // того, слухаємо ми клавіші чи ні.
+            // The stack is paid behaviour too, so the check does not depend on
+            // whether we are listening for keys.
             const unguard = guard(ctx.getRoot());
             if (options.keys === false) return unguard;
 

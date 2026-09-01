@@ -1,8 +1,9 @@
 /**
- * Розкладка таймлайна: діапазон і події → слоти осі та покладені на сітку бари.
+ * The timeline layout: a range and some events -> axis slots and bars placed on
+ * the grid.
  *
- * Без DOM, без Vue, без Date.now() — усе, що впливає на результат, приходить
- * у `LayoutInput`. Координати віддаються у слотах, не в пікселях (рішення 06).
+ * No DOM, no Vue, no Date.now() - everything that affects the result arrives in
+ * `LayoutInput`. Coordinates are given in slots, not pixels (decision 06).
  */
 
 import { addDays, diffDays, startOfWeek, toEpoch, toIso, toLocalDate, weekday } from "./date";
@@ -27,13 +28,14 @@ function slotSize(step: SlotStep): number {
 
 interface Axis {
     slots: Slot[];
-    /** Фактичний діапазон осі: при кроці «тиждень» ширший за заданий. */
+    /** The actual range of the axis: at the "week" step, wider than the one asked for. */
     range: DateRange;
 }
 
 /**
- * Будує колонки осі. При кроці «тиждень» початок відсувається назад до початку
- * тижня — вісь завжди складається з цілих слотів, обрізаних колонок не буває.
+ * Builds the columns of the axis. At the "week" step the start is pushed back
+ * to the beginning of the week - the axis is always made of whole slots, and
+ * there is no such thing as a clipped column.
  */
 function buildAxis(
     range: DateRange,
@@ -71,24 +73,26 @@ function buildAxis(
 }
 
 /**
- * Позиція дня в одиницях слота. Дробова при тижневому кроці, і це не недогляд:
- * подія триває дні, а не тижні, і округлення до колонки означало б, що
- * триденна бронь і тижнева малюються однаково — а зсунута на день не
- * ворухнеться взагалі.
+ * The position of a day in slot units. Fractional at the week step, and that is
+ * not an oversight: an event lasts days rather than weeks, and rounding to a
+ * column would mean a three-day booking and a week-long one are drawn the same,
+ * while one shifted by a day would not move at all.
  *
- * Ціною цього координати перестали бути індексами масиву слотів: там, де
- * потрібен саме слот, його беруть через Math.floor. Натомість бар лежить там,
- * де він насправді.
+ * The price is that coordinates stopped being indices into the slot array:
+ * wherever a slot itself is needed, it is taken through Math.floor. In exchange,
+ * a bar sits where it actually is.
  */
 function slotAt(epoch: number, axisStart: number, step: SlotStep): number {
     return diffDays(axisStart, epoch) / slotSize(step);
 }
 
 /**
- * Кладе подію на вісь. Повертає null, якщо вона повністю поза видимим вікном.
+ * Places an event on the axis. Returns null if it falls entirely outside the
+ * visible window.
  *
- * `end`, який не більший за `start`, трактується як один слот: це типова
- * помилка даних, і пробачити її дешевше, ніж мовчки загубити подію.
+ * An `end` that is not greater than `start` is treated as one slot: that is a
+ * common mistake in data, and forgiving it costs less than silently losing the
+ * event.
  */
 function place<I>(
     item: Item<I>,
@@ -122,11 +126,12 @@ interface PackResult<I> {
 }
 
 /**
- * Розкладає бари по доріжках так, щоб ті, що перетинаються, не накладались.
- * Жадібний прохід зліва направо: подія сідає в першу доріжку, яка звільнилась.
+ * Spreads bars across lanes so that overlapping ones do not sit on top of each
+ * other. A greedy pass from left to right: an event takes the first lane that
+ * has come free.
  *
- * Порядок сортування зафіксований аж до `id`, щоб та сама вхідна пачка завжди
- * давала ту саму картинку — інакше бари «стрибали» б між перерендерами.
+ * The sort order is pinned all the way down to `id`, so that the same input
+ * always gives the same picture - otherwise bars would jump between repaints.
  */
 function packLanes<I>(bars: PlacedItem<I>[]): PackResult<I> {
     const ordered = [...bars].sort(
@@ -148,10 +153,11 @@ function packLanes<I>(bars: PlacedItem<I>[]): PackResult<I> {
 }
 
 /**
- * Головна функція ядра.
+ * The main function of the core.
  *
- * Порядок рядків дорівнює порядку `resources` — ядро не сортує й не фільтрує
- * (рішення 04). Події невідомих ресурсів ігноруються; вхідні масиви не мутуються.
+ * The order of the rows equals the order of `resources` - the core neither
+ * sorts nor filters (decision 04). Events belonging to unknown resources are
+ * ignored; the input arrays are never mutated.
  */
 export function buildLayout<R = unknown, I = unknown>(input: LayoutInput<R, I>): Layout<R, I> {
     const axis = buildAxis(

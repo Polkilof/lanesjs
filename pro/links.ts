@@ -1,32 +1,33 @@
 /**
- * Зв'язки між барами: стрілка від кінця одного до початку іншого. Перший
- * плагін, який малює постійно, а не під час жесту, — і тому саме він
- * скористався подією `layout`, яка досі оголошувалась, але не надходила.
+ * Links between bars: an arrow from the end of one to the start of another. The
+ * first plugin that draws all the time rather than during a gesture - which is
+ * why it was the one to make use of the `layout` event, declared until then but
+ * never actually delivered.
  *
- * Геометрію бере з контракту, а не з DOM: рядки віртуалізовані, тож бара, до
- * якого веде стрілка, у розмітці може й не бути. Порахувати його місце можна
- * завжди, а знайти — ні.
+ * It takes geometry from the contract, not from the DOM: rows are virtualized,
+ * so the bar an arrow leads to may not be in the markup at all. Its place can
+ * always be computed; it cannot always be found.
  *
- * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
+ * The `pro/` folder imports from `core/` and `vue/`; never the other way round.
  */
 import { guard } from "./license";
 import type { Geometry, Layout, Plugin, PluginContext } from "../core/types";
 
-/** Пара ідентифікаторів подій; напрямок від `from` до `to`. */
+/** A pair of event ids; the direction runs from `from` to `to`. */
 export interface Link {
     from: string;
     to: string;
 }
 
 export interface LinksOptions {
-    /** Читається на кожну перемальовку, тож список може змінюватись. */
+    /** Read on every repaint, so the list is free to change. */
     links: () => Link[];
-    /** Колір лінії; за замовчуванням — колір тексту таблиці. */
+    /** The colour of the line; defaults to the table's text colour. */
     color?: string;
     className?: string;
 }
 
-/** Де закінчується й де починається бар — у пікселях тіла сітки. */
+/** Where a bar ends and where it begins - in pixels of the grid body. */
 interface Anchor {
     left: number;
     right: number;
@@ -65,9 +66,9 @@ export function links<R = unknown, I = unknown>(options: LinksOptions): Plugin<R
             }
 
             /**
-             * Ортогональний з'єднувач: трохи вправо, потім по вертикалі, потім
-             * до цілі. Пряма лінія перетинала б чужі бари під довільним кутом
-             * і читалася б гірше, ніж кут.
+             * An orthogonal connector: a little to the right, then vertically,
+             * then to the target. A straight line would cross other people's
+             * bars at an arbitrary angle and read worse than a corner does.
              */
             function pathOf(from: Anchor, to: Anchor): string {
                 const stub = 10;
@@ -96,9 +97,9 @@ export function links<R = unknown, I = unknown>(options: LinksOptions): Plugin<R
                     path.setAttribute("stroke-width", "1.5");
                     svg.appendChild(path);
 
-                    // Вістря малюємо самі, а не маркером: маркер вимагає
-                    // унікального id у defs, а таблиць на сторінці може бути
-                    // кілька, і ці id зіткнулись би.
+                    // The arrowhead is drawn by hand rather than with a marker:
+                    // a marker needs a unique id in defs, and a page may hold
+                    // several tables, whose ids would then collide.
                     const head = document.createElementNS(SVG_NS, "path");
                     head.setAttribute("d", `M ${to.left} ${to.middle} l -5 -3.5 v 7 z`);
                     head.setAttribute("fill", options.color ?? "currentColor");

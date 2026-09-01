@@ -1,28 +1,31 @@
 /**
- * Публічний контракт Lanes. Цей файл — RFC на API: усе, що тут експортується,
- * побачить сторонній розробник, тож зміни тут дорожчі за зміни будь-де в теці.
+ * The public contract of Lanes. This file is an RFC on the API: everything
+ * exported here is seen by an outside developer, so a change here costs more
+ * than a change anywhere else in the folder.
  *
- * Нуль імпортів — ні з "@/", ні з FullCalendar, ні з Vue. Див. ../BRIEF.md
+ * Zero imports - no "@/" alias, no FullCalendar, no Vue.
  */
 
 /**
- * «Настінна» дата у форматі YYYY-MM-DD, без часової зони (рішення 05).
- * Зона — турбота форматера у шарі vue, ядро її не знає.
+ * A "wall" date in YYYY-MM-DD form, with no time zone (decision 05).
+ * The zone is the formatter's business in the vue layer; the core knows
+ * nothing about it.
  */
 export type IsoDate = string;
 
-/** Діапазон дат. `end` — ексклюзивний, як у FullCalendar (рішення 03). */
+/** A range of dates. `end` is exclusive, as in FullCalendar (decision 03). */
 export interface DateRange {
     start: IsoDate;
     end: IsoDate;
 }
 
-/** Крок осі часу. Години й дрібніші кроки — платний шар. */
+/** The step of the time axis. Hours and finer steps are the paid layer. */
 export type SlotStep = "day" | "week";
 
 /**
- * Рядок таймлайна. Усе прикладне — аватар, посада, дата звільнення — живе в `meta`
- * і рендериться слотом; ядро в `meta` не заглядає.
+ * A row of the timeline. Everything application-specific - an avatar, a job
+ * title, a leaving date - lives in `meta` and is rendered by a slot; the core
+ * never looks inside `meta`.
  */
 export interface Resource<M = unknown> {
     id: string;
@@ -31,67 +34,69 @@ export interface Resource<M = unknown> {
 }
 
 /**
- * `bar` — звичайна подія, займає доріжку в рядку.
- * `background` — підкладка під сіткою, не бере участі в укладанні доріжок:
- * періоди, коли ресурс узагалі недоступний, свята, робочі години.
+ * `bar` - an ordinary event, takes a lane in its row.
+ * `background` - a backdrop under the grid, taking no part in lane packing:
+ * periods when the resource is unavailable at all, days off, working hours.
  */
 export type ItemDisplay = "bar" | "background";
 
-/** Подія на таймлайні. Колір, іконка, статус — у `meta`, не в ядрі. */
+/** An event on the timeline. Colour, icon, status go in `meta`, not the core. */
 export interface Item<M = unknown> {
     id: string;
     resourceId: string;
     start: IsoDate;
-    /** Ексклюзивний: подія на один день — це start=01, end=02. */
+    /** Exclusive: a one-day event is start=01, end=02. */
     end: IsoDate;
-    /** За замовчуванням "bar". */
+    /** Defaults to "bar". */
     display?: ItemDisplay;
     meta?: M;
 }
 
-/** Одна колонка осі. */
+/** One column of the axis. */
 export interface Slot {
     index: number;
     start: IsoDate;
-    /** Ексклюзивний. */
+    /** Exclusive. */
     end: IsoDate;
-    /** Локальна опівніч початку слота — лише для форматерів у шарі vue. */
+    /** Local midnight of the slot's start - only for formatters in the vue layer. */
     date: Date;
     isToday: boolean;
     isWeekend: boolean;
 }
 
 /**
- * Подія, покладена на сітку. Координати — у слотах, не в пікселях (рішення 06).
+ * An event placed on the grid. Coordinates are in slots, not pixels
+ * (decision 06).
  *
- * При кроці "week" вони дробові: подія триває дні, а колонка — тиждень, тож
- * триденна бронь займає 3/7 колонки й починається там, де починається. Це не
- * індекси масиву slots: кому потрібна колонка, той бере Math.floor.
+ * At the "week" step they are fractional: an event lasts days while a column is
+ * a week, so a three-day booking takes 3/7 of a column and starts where it
+ * actually starts. These are not indices into `slots`: whoever needs the column
+ * takes Math.floor.
  */
 export interface PlacedItem<M = unknown> {
     item: Item<M>;
-    /** Де подія починається у видимому вікні, в одиницях слота. */
+    /** Where the event begins within the visible window, in slot units. */
     slotIndex: number;
-    /** Скільки слотів займає у видимому вікні; завжди більше нуля. */
+    /** How many slots it takes in the visible window; always greater than zero. */
     slotSpan: number;
-    /** Доріжка всередині рядка: 0, якщо перекриттів немає. */
+    /** The lane inside the row: 0 when nothing overlaps. */
     lane: number;
-    /** Подія починається до / закінчується після видимого діапазону. */
+    /** The event starts before / ends after the visible range. */
     clippedStart: boolean;
     clippedEnd: boolean;
 }
 
-/** Рядок результату розкладки. */
+/** A row of the layout result. */
 export interface Row<R = unknown, I = unknown> {
     resource: Resource<R>;
     bars: PlacedItem<I>[];
-    /** Підкладки: без доріжок, малюються під сіткою. */
+    /** Backdrops: no lanes, drawn under the grid. */
     backgrounds: PlacedItem<I>[];
-    /** Скільки доріжок займає рядок; мінімум 1. Висота рядка = f(laneCount). */
+    /** How many lanes the row takes; at least 1. Row height = f(laneCount). */
     laneCount: number;
 }
 
-/** Повний результат розкладки — усе, що потрібно шару vue для рендеру. */
+/** The full layout result - everything the vue layer needs in order to render. */
 export interface Layout<R = unknown, I = unknown> {
     range: DateRange;
     step: SlotStep;
@@ -100,61 +105,59 @@ export interface Layout<R = unknown, I = unknown> {
 }
 
 /**
- * Вхід розкладки. Компонент контрольований (рішення 04): порядок `resources` —
- * це і є порядок рядків, ядро нічого не сортує й не фільтрує.
+ * The layout input. The component is controlled (decision 04): the order of
+ * `resources` is the order of the rows, and the core neither sorts nor filters.
  */
 export interface LayoutInput<R = unknown, I = unknown> {
     range: DateRange;
     step: SlotStep;
     resources: Resource<R>[];
     items: Item<I>[];
-    /** Що вважати «сьогодні». Передається явно, щоб тести були детермінованими. */
+    /** What counts as "today". Passed explicitly to keep tests deterministic. */
     today?: IsoDate;
-    /** Дні тижня-вихідні, 0 — неділя. За замовчуванням [0, 6]. */
+    /** Which weekdays are weekend days, 0 is Sunday. Defaults to [0, 6]. */
     weekendDays?: number[];
-    /** З якого дня починається тиждень при step: "week". За замовчуванням 1 (понеділок). */
+    /** Which day a week starts on at step: "week". Defaults to 1 (Monday). */
     weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }
 
-/** Події таймлайна. На них підписується і застосунок, і плагіни. */
+/** Timeline events. Both the application and the plugins subscribe to these. */
 export interface TimelineEvents<R = unknown, I = unknown> {
     /**
-     * Картинка змінилась: перераховано розкладку або геометрію. Сигнал для
-     * тих, хто малює в шарі накладок — час перемалювати.
+     * The picture changed: the layout or the geometry was recomputed. A signal
+     * for whoever draws in the overlay layer - time to repaint.
      */
     layout: (layout: Layout<R, I>) => void;
-    /** Клік по порожній клітинці. */
+    /** A click on an empty cell. */
     cellClick: (payload: { date: IsoDate; resource: Resource<R> }) => void;
-    /** Клік по події. */
+    /** A click on an event. */
     itemClick: (payload: { item: Item<I>; resource: Resource<R> }) => void;
-    /** Клік по підпису колонки. */
+    /** A click on a column label. */
     slotClick: (payload: { slot: Slot }) => void;
-    /** Видимий діапазон змінився — застосунок вантажить дані. */
+    /** The visible range changed - the application loads data. */
     rangeChange: (range: DateRange) => void;
 }
 
 /**
- * Те, що плагін отримує на старті. Мінімальна поверхня: читати розкладку,
- * слухати події, просити перерахунок.
- */
-/**
- * Геометрія сітки в пікселях. Плагін не має права її вимірювати сам: ширина
- * дня й висоти рядків — результат вирівнювання по пристроєвих пікселях, і
- * повторне вимірювання дало б інші числа, ніж ті, за якими малює компонент.
+ * The geometry of the grid, in pixels. A plugin has no business measuring it
+ * itself: the width of a day and the heights of the rows are the result of
+ * alignment to device pixels, and measuring again would give numbers other than
+ * the ones the component draws by.
  */
 export interface Geometry {
     slotWidth: number;
-    /** Верх кожного рядка від початку тіла; довжина на одиницю більша. */
+    /** The top of each row from the start of the body; one element longer. */
     rowOffsets: number[];
     /**
-     * Висота бара й проміжок між доріжками. Без них не порахувати, де бар
-     * лежить усередині рядка, а це потрібно всім, хто малює по барах.
+     * The height of a bar and the gap between lanes. Without them there is no
+     * working out where a bar sits inside a row, and everyone who draws along
+     * bars needs that.
      */
     barHeight: number;
     barGap: number;
 }
 
-/** Що лежить під точкою. Порожні місця теж влучання — там створюють події. */
+/** What lies under a point. Empty places are hits too - events are created there. */
 export interface HitTest<R = unknown> {
     resource: Resource<R>;
     resourceIndex: number;
@@ -162,58 +165,63 @@ export interface HitTest<R = unknown> {
     date: IsoDate;
 }
 
+/**
+ * What a plugin is handed at startup. A minimal surface: read the layout,
+ * listen to events, ask for a recomputation.
+ */
 export interface PluginContext<R = unknown, I = unknown> {
     getLayout(): Layout<R, I>;
-    /** Кореневий елемент; у ядрі завжди null, заповнює шар vue. */
+    /** The root element; always null in the core, filled in by the vue layer. */
     getRoot(): HTMLElement | null;
     /**
-     * Шар для власних накладок плагіна — привидів перетягування, рамок
-     * виділення. Лежить у координатах сітки й не ловить вказівник, тож
-     * плагін малює в ньому, не заважаючи клікам по барах.
+     * The layer for a plugin's own overlays - drag ghosts, selection outlines.
+     * It sits in grid coordinates and does not catch the pointer, so a plugin
+     * can draw in it without getting in the way of clicks on bars.
      */
     getOverlay(): HTMLElement | null;
     getGeometry(): Geometry;
     /**
-     * Ресурс і день під точкою у координатах вікна — тими самими, що їх дає
-     * подія вказівника. Поза сіткою — null.
+     * The resource and the day under a point in viewport coordinates - the same
+     * ones a pointer event gives. Outside the grid, null.
      */
     hitTest(point: { x: number; y: number }): HitTest<R> | null;
-    /** Підписка; повертає функцію відписки. */
+    /** Subscribe; returns the unsubscribe function. */
     on<K extends keyof TimelineEvents<R, I>>(
         event: K,
         handler: TimelineEvents<R, I>[K],
     ): () => void;
-    /** Попросити перерахунок розкладки. */
+    /** Ask for the layout to be recomputed. */
     requestUpdate(): void;
 }
 
 /**
- * Точка розширення (рішення 01). Платний шар — це набір плагінів:
- * перетягування, віртуалізація, масштаб. Ядро про них не знає нічого.
+ * The extension point (decision 01). The paid layer is a set of plugins:
+ * dragging, virtualization, zoom. The core knows nothing about them.
  */
 export interface Plugin<R = unknown, I = unknown> {
     name: string;
-    /** Повернена функція викликається при знищенні таймлайна. */
+    /** The returned function is called when the timeline is destroyed. */
     setup(ctx: PluginContext<R, I>): void | (() => void);
 }
 
 /**
- * Те, що застосунок дістає через `ref` на компонент.
+ * What the application gets through a `ref` on the component.
  *
- * Оголошено тут, а не виведено з компонента, бо вивести його споживач не може:
- * `Timeline` — узагальнений SFC, тобто функція, а не конструктор, і звичне
- * `InstanceType<typeof Timeline>` на ньому не компілюється взагалі. Без
- * названого типу лишалось би або тягнути `vue-component-type-helpers`, або
- * переписувати цю форму в себе — обидва варіанти гірші за один експорт.
+ * Declared here rather than derived from the component, because a consumer
+ * cannot derive it: `Timeline` is a generic SFC, that is a function rather than
+ * a constructor, and the usual `InstanceType<typeof Timeline>` does not compile
+ * on it at all. Without a named type the only options left would be pulling in
+ * `vue-component-type-helpers` or rewriting this shape locally - both worse
+ * than a single export.
  *
- * `layout` тут — уже розгорнута розкладка, а не `ComputedRef`: рефи розгортає
- * проксі, який Vue робить із `defineExpose`.
+ * `layout` here is the layout already unwrapped, not a `ComputedRef`: refs are
+ * unwrapped by the proxy Vue builds from `defineExpose`.
  */
 export interface TimelineInstance<R = unknown, I = unknown> {
     layout: Layout<R, I>;
-    /** Перевиміряти вікно — після власної зміни розмірів контейнера. */
+    /** Measure the viewport again - after resizing the container yourself. */
     syncViewport(): void;
     scrollToDate(date: IsoDate, align?: "start" | "center"): void;
-    /** Намалювати всю таблицю, надрукувати й повернути віртуалізацію. */
+    /** Draw the whole table, print it, and put virtualization back. */
     print(): Promise<void>;
 }

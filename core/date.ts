@@ -1,15 +1,15 @@
 /**
- * Арифметика «настінних» дат (рішення 05). Усі обчислення йдуть в епохах
- * UTC-опівночі: перехід на літній час не має зсувати межі днів.
+ * Wall-date arithmetic (decision 05). Everything is computed in UTC-midnight
+ * epochs: a daylight-saving switch must not shift the boundaries of a day.
  *
- * Внутрішній модуль ядра — у публічний контракт не входить.
+ * An internal module of the core - not part of the public contract.
  */
 
 import type { IsoDate } from "./types";
 
 export const MS_PER_DAY = 86_400_000;
 
-/** YYYY-MM-DD → епоха UTC-опівночі. */
+/** YYYY-MM-DD -> UTC-midnight epoch. */
 export function toEpoch(date: IsoDate): number {
     const [year, month, day] = date.split("-").map(Number);
     return Date.UTC(year, month - 1, day);
@@ -19,7 +19,7 @@ export function toIso(epoch: number): IsoDate {
     return new Date(epoch).toISOString().slice(0, 10);
 }
 
-/** Локальна опівніч — лише для форматерів у шарі vue. */
+/** Local midnight - only for the formatters in the vue layer. */
 export function toLocalDate(epoch: number): Date {
     const utc = new Date(epoch);
     return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
@@ -33,7 +33,7 @@ export function diffDays(from: number, to: number): number {
     return Math.round((to - from) / MS_PER_DAY);
 }
 
-/** День тижня, 0 — неділя. */
+/** Day of the week, 0 is Sunday. */
 export function weekday(epoch: number): number {
     return new Date(epoch).getUTCDay();
 }
@@ -47,7 +47,7 @@ export function startOfMonth(epoch: number): number {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
 }
 
-/** Число зберігається; якщо в цільовому місяці його немає — притискається до останнього дня. */
+/** The day of the month is kept; if the target month is shorter, it clamps to the last day. */
 export function addMonths(epoch: number, months: number): number {
     const date = new Date(epoch);
     const year = date.getUTCFullYear();

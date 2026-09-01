@@ -1,10 +1,12 @@
 /**
- * Точка входу платної половини. Окрема від безкоштовної навмисно: хто не
- * імпортує `pro`, той його й не збирає — плагіни ставляться через проп
- * `plugins`, як будь-які чужі, і ядро про них не знає.
+ * Entry point of the paid half. Kept apart from the free one deliberately:
+ * whoever does not import `pro` does not build it either - plugins are
+ * installed through the `plugins` prop, like anyone else's, and the core knows
+ * nothing about them.
  *
- * `gesture` тут не службовий виняток, а частина обіцянки: на ньому тримаються
- * всі жести, і чужий плагін має писатись так само, як наші.
+ * `gesture` is not an internal exception here but part of the promise: every
+ * gesture rests on it, and a third-party plugin should be written exactly the
+ * way ours are.
  */
 export { drag } from "./drag";
 export type { DragEdge, DragMove, DragOptions, DragResize } from "./drag";

@@ -1,36 +1,36 @@
 /**
- * Вісь у днях. Спільна для жестів, бо всі вони міряють одне й те саме, а
- * колонками цього не виміряти.
+ * The axis in days. Shared by the gestures, because they all measure the same
+ * thing, and columns cannot measure it.
  *
- * Чому не в колонках, як було: при кроці "week" колонка накриває сім днів, і
- * подія, коротша за тиждень, у колонках не виражається взагалі. Край,
- * обмежений однією колонкою, не міг зрушити ні на день — жест мовчки нічого не
- * робив; а коли таки перестрибував колонку, дата їхала на сім днів, і кінець
- * опинявся раніше за початок. Обидві біди з однієї причини: одиниця виміру
- * жесту не збігалася з одиницею, у якій живуть дані.
+ * Why not columns, as it used to be: at the "week" step a column covers seven
+ * days, and an event shorter than a week cannot be expressed in columns at all.
+ * An edge clamped to a single column could not move by one day - the gesture
+ * silently did nothing; and when it did jump a column, the date travelled seven
+ * days and the end landed before the start. Both troubles came from one cause:
+ * the unit the gesture measured in did not match the unit the data lives in.
  *
- * Тому одиниця тут — день, у будь-якому кроці. Колонки лишаються тільки там,
- * де малюють: привид рахує пікселі, і йому віддають дробову колонку.
+ * So the unit here is a day, at every step. Columns remain only where things
+ * are drawn: the ghost counts pixels, and it is handed a fractional column.
  *
- * Тека pro/ імпортує з core/; назад — ніколи (див. README).
+ * The pro/ folder imports from core/; never the other way round.
  */
 import { addDays, diffDays, toEpoch, toIso } from "../core/date";
 import type { IsoDate, Layout } from "../core/types";
 
 export interface DayAxis {
-    /** Скільки днів накриває одна колонка: день — один, тиждень — сім. */
+    /** How many days one column covers: a day step one, a week step seven. */
     perSlot: number;
-    /** Скільки днів на осі всього. */
+    /** How many days the axis holds in total. */
     length: number;
-    /** День осі за датою. Від'ємний — раніше за початок осі. */
+    /** The axis day for a date. Negative means earlier than the axis start. */
     dayOf(date: IsoDate): number;
-    /** Дата за днем осі. */
+    /** The date at an axis day. */
     dateAt(day: number): IsoDate;
-    /** Колонка за днем; дробова, бо саме в колонках малюється привид. */
+    /** The column for a day; fractional, because the ghost is drawn in columns. */
     slotOf(day: number): number;
     /**
-     * День за колонкою. Через округлення, а не діленням навпростець: 3/7*7
-     * у подвійній точності дає 2.9999999999999996, і день поїхав би назад.
+     * The day at a column. Through rounding rather than plain division: 3/7*7
+     * in double precision gives 2.9999999999999996, and the day would slip back.
      */
     dayOfSlot(slot: number): number;
 }
@@ -38,8 +38,8 @@ export interface DayAxis {
 export function dayAxis<R, I>(layout: Layout<R, I>): DayAxis {
     const slots = layout.slots;
 
-    // Порожня вісь трапляється хіба що в тестах і на першому кадрі; віддаємо
-    // безпечні одиниці, щоб жест просто нікуди не влучив.
+    // An empty axis happens only in tests and on the first frame; safe units
+    // are returned so that a gesture simply hits nothing.
     if (slots.length === 0) {
         return {
             perSlot: 1,
@@ -66,15 +66,15 @@ export function dayAxis<R, I>(layout: Layout<R, I>): DayAxis {
 }
 
 /**
- * День осі під вказівником. Накладка лежить у координатах сітки, тож її лівий
- * край — це й є нуль осі; питати про це компонент нема потреби.
+ * The axis day under the pointer. The overlay sits in grid coordinates, so its
+ * left edge is the zero of the axis; there is no need to ask the component.
  */
 export function dayUnder(x: number, overlay: HTMLElement, slotWidth: number, perSlot: number): number {
     const dayWidth = slotWidth / perSlot;
     return Math.floor((x - overlay.getBoundingClientRect().left) / dayWidth);
 }
 
-/** Межі можуть зійтися в точку — тоді перемагає нижня, а не NaN. */
+/** The bounds may meet at a point - then the lower one wins, rather than NaN. */
 export function clamp(value: number, low: number, high: number): number {
     return Math.min(Math.max(value, low), Math.max(low, high));
 }
