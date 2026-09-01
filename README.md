@@ -3,6 +3,10 @@
 A resource timeline for Vue 3. Rows of people, rooms or machines; a day or week
 axis across the top; bars you can drag, stretch and connect.
 
+**[Live demo](https://polkilof.github.io/lanesjs/)** — the component itself, not a
+video: 300 rows on demand, both steps, and every paid gesture you can switch on
+and off.
+
 ```sh
 npm i lanesjs
 ```
