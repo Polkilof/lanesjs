@@ -799,5 +799,4 @@ live demo. Until the store is up, keys are issued by hand — open an issue at
 ## Status
 
 `0.1.0` — in production in one application, API still allowed to move before
-`1.0`. Decisions and their reasons are written down in [BRIEF.md](./BRIEF.md),
-in Ukrainian.
+`1.0`.
