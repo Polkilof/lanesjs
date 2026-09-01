@@ -219,6 +219,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 <style scoped>
 .team {
+    /* Скільки місця забирає трикутник разом із проміжком. Назва людини
+       відступає рівно на стільки, тож обидві назви починаються з однієї
+       вертикалі й не можуть розійтись при зміні розміру іконки. */
+    --team-chevron: 20px;
+    --team-gap: 6px;
+    --team-indent: calc(var(--team-chevron) + var(--team-gap));
+
     position: relative;
     display: flex;
     flex-direction: column;
@@ -295,16 +302,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 /* Заголовок команди: трикутник, назва, розмір і «+». */
 .team__head {
     display: flex;
+    flex: 1;
+    min-width: 0;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--team-gap);
     height: 100%;
-    padding: 0 0.5rem;
 }
 
 .team__chevron,
 .team__add {
     display: inline-flex;
-    padding: 0.2rem;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--team-chevron);
+    height: var(--team-chevron);
+    padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
     background: none;
@@ -333,10 +346,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 /* Відступ показує належність — теж робота застосунку, не компонента. */
 .team__person {
     display: flex;
+    flex: 1;
+    min-width: 0;
     flex-direction: column;
     justify-content: center;
     height: 100%;
-    padding: 0 0.5rem 0 2rem;
+    padding-left: var(--team-indent);
     line-height: 1.25;
 }
 
@@ -438,6 +453,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     border-color: var(--accent);
     background: var(--accent);
     color: #fff;
+}
+
+/* Тісніше за типове: у панелі стоять дві кнопки, і 12px з кожного боку з'їдають
+   рівно ту ширину, якої бракує назві команди. */
+.team__timeline :deep(.rt__resource) {
+    padding: 0 6px;
 }
 
 .team__timeline :deep(.rt__bar) {

@@ -25,6 +25,8 @@
  * Емодзі як іконки не використовуються навмисно: вони різні в кожній системі,
  * не фарбуються токеном і не мають спільної товщини лінії.
  */
+import { computed } from "vue";
+
 type IconName =
     | "rows"
     | "bolt"
@@ -102,7 +104,12 @@ const ICONS: Record<IconName, string[]> = {
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 20 });
 
-const paths = ICONS[props.name];
+/**
+ * Обчислюване, а не сталa: `name` у половини викликів залежить від стану —
+ * тема, «скопійовано», розгорнута команда. Прочитане один раз при створенні,
+ * воно назавжди лишало першу іконку, і жодна з них не мінялась.
+ */
+const paths = computed(() => ICONS[props.name]);
 </script>
 
 <style scoped>
