@@ -10,7 +10,7 @@
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
-import { addDays, diffDays, toEpoch, toIso } from "../core/date";
+import { clamp, dayAxis, dayUnder } from "./days";
 import { guard } from "./license";
 import { makeGhost, trackPointer } from "./gesture";
 import type { Target } from "./gesture";
@@ -74,8 +74,15 @@ interface Grab<R, I> {
     resourceIndex: number;
     /** Край, якщо тягнуть край; null — переїзд цілком. */
     edge: DragEdge | null;
-    /** За скільки днів від початку бара його схопили. */
-    grabOffset: number;
+    /**
+     * Межі елемента в днях осі; кінець ексклюзивний. Від'ємний початок означає
+     * бар, обрізаний лівим краєм діапазону, — і саме тому вони тут, а не
+     * виводяться з видимого прямокутника: у нього обрізане не влазить.
+     */
+    startDay: number;
+    endDay: number;
+    /** День осі, за який узяли бар. */
+    grabDay: number;
 }
 
 export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}): Plugin<R, I> {
@@ -96,7 +103,10 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             let hovered: HTMLElement | null = null;
 
             function findBar(id: string): Grab<R, I> | undefined {
-                const rows = ctx.getLayout().rows;
+                const layout = ctx.getLayout();
+                const axis = dayAxis(layout);
+                const rows = layout.rows;
+
                 for (let index = 0; index < rows.length; index++) {
                     const placed = rows[index].bars.find((candidate) => candidate.item.id === id);
                     if (placed !== undefined) {
@@ -105,7 +115,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                             resource: rows[index].resource,
                             resourceIndex: index,
                             edge: null,
-                            grabOffset: 0,
+                            startDay: axis.dayOf(placed.item.start),
+                            endDay: axis.dayOf(placed.item.end),
+                            grabDay: 0,
                         };
                     }
                 }
@@ -145,17 +157,23 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             /**
-             * Скільки днів між двома колонками осі. Рахуємо саме так, а не
-             * різницею дат елемента: бар міг бути обрізаний краєм діапазону, і
-             * тоді видимий початок — не початок елемента.
+             * Видимий прямокутник бара в днях. Обрізане краєм діапазону сюди
+             * не входить — привид малює лише те, що видно, — але дати
+             * рахуються не з нього, а з самого елемента.
              */
-            function shiftBetween(fromIndex: number, toIndex: number): number {
-                const slots = ctx.getLayout().slots;
-                return diffDays(toEpoch(slots[fromIndex].start), toEpoch(slots[toIndex].start));
+            function visible(grab: Grab<R, I>): { from: number; to: number } {
+                const axis = dayAxis(ctx.getLayout());
+                return { from: Math.max(grab.startDay, 0), to: Math.min(grab.endDay, axis.length) };
             }
 
-            function shiftIso(date: IsoDate, days: number): IsoDate {
-                return toIso(addDays(toEpoch(date), days));
+            /** Прямокутник для привида. Колонки дробові: він рахує пікселі. */
+            function rect(from: number, to: number, resourceIndex: number): Target {
+                const axis = dayAxis(ctx.getLayout());
+                return {
+                    slotIndex: axis.slotOf(from),
+                    slotSpan: axis.slotOf(to - from),
+                    resourceIndex,
+                };
             }
 
             /**
@@ -165,57 +183,68 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
              * дозволити одне, а застосувати інше.
              */
             function moveOf(grab: Grab<R, I>, target: Target): DragMove<R, I> | null {
-                const to = ctx.getLayout().rows[target.resourceIndex]?.resource;
+                const layout = ctx.getLayout();
+                const to = layout.rows[target.resourceIndex]?.resource;
                 if (to === undefined) return null;
 
+                const axis = dayAxis(layout);
                 const item = grab.placed.item;
-                const days = shiftBetween(grab.placed.slotIndex, target.slotIndex);
+                const days = axis.dayOfSlot(target.slotIndex) - visible(grab).from;
 
                 return {
                     item,
                     from: grab.resource,
                     to,
-                    start: shiftIso(item.start, days),
-                    end: shiftIso(item.end, days),
+                    start: axis.dateAt(grab.startDay + days),
+                    end: axis.dateAt(grab.endDay + days),
                     days,
                 };
             }
 
+            /**
+             * Розтягування рахується в днях і від меж самого елемента, а не
+             * від видимих колонок. Інакше при кроці "week" край не мав куди
+             * зрушити всередині тижня, а перестрибнувши його — вивертав подію
+             * навиворіт: кінець опинявся раніше за початок.
+             *
+             * Мінімум — один день, і це не порада, а межа контракту: `end`
+             * ексклюзивний, тож подія, коротша за день, не існує.
+             */
             function resizeOf(grab: Grab<R, I>, target: Target): DragResize<R, I> | null {
                 if (grab.edge === null) return null;
 
+                const axis = dayAxis(ctx.getLayout());
                 const item = grab.placed.item;
-                const start = grab.placed.slotIndex;
-                const end = start + grab.placed.slotSpan;
 
                 if (grab.edge === "start") {
-                    const days = shiftBetween(start, target.slotIndex);
+                    const day = Math.min(axis.dayOfSlot(target.slotIndex), grab.endDay - 1);
                     return {
                         item,
                         resource: grab.resource,
                         edge: "start",
-                        start: shiftIso(item.start, days),
+                        start: axis.dateAt(day),
                         end: item.end,
                     };
                 }
 
-                // Ексклюзивний кінець зсуваємо за останнім укритим днем: сама
-                // колонка кінця може лежати вже за межами осі.
-                const days = shiftBetween(end - 1, target.slotIndex + target.slotSpan - 1);
+                const day = Math.max(axis.dayOfSlot(target.slotIndex + target.slotSpan), grab.startDay + 1);
                 return {
                     item,
                     resource: grab.resource,
                     edge: "end",
                     start: item.start,
-                    end: shiftIso(item.end, days),
+                    end: axis.dateAt(day),
                 };
             }
 
             /** Чи ціль узагалі відрізняється від того, що вже є. */
             function changed(grab: Grab<R, I>, target: Target): boolean {
+                const axis = dayAxis(ctx.getLayout());
+                const box = visible(grab);
+
                 return (
-                    target.slotIndex !== grab.placed.slotIndex ||
-                    target.slotSpan !== grab.placed.slotSpan ||
+                    axis.dayOfSlot(target.slotIndex) !== box.from ||
+                    axis.dayOfSlot(target.slotIndex + target.slotSpan) !== box.to ||
                     target.resourceIndex !== grab.resourceIndex
                 );
             }
@@ -241,8 +270,14 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         // нікуди не поїде, гірше, ніж не тягнути його зовсім.
                         if (edge === null && options.onMove === undefined) return null;
 
+                        const axis = dayAxis(ctx.getLayout());
                         grab.edge = edge;
-                        grab.grabOffset = hit.slot.index - grab.placed.slotIndex;
+                        grab.grabDay = dayUnder(
+                            event.clientX,
+                            overlay,
+                            ctx.getGeometry().slotWidth,
+                            axis.perSlot,
+                        );
 
                         // Привид знає, чиє він відображення: висоту й місце в
                         // рядку бере з бара, який тягнуть.
@@ -254,26 +289,28 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
                         if (hit === null) return null;
 
-                        const slots = ctx.getLayout().slots.length;
-                        const start = grab.placed.slotIndex;
-                        const end = start + grab.placed.slotSpan;
+                        const axis = dayAxis(ctx.getLayout());
+                        const day = dayUnder(event.clientX, overlay, ctx.getGeometry().slotWidth, axis.perSlot);
+                        const box = visible(grab);
 
                         if (grab.edge === "start") {
-                            // День мінімум: край не може перескочити протилежний
-                            const next = Math.min(Math.max(hit.slot.index, 0), end - 1);
-                            return { slotIndex: next, slotSpan: end - next, resourceIndex: grab.resourceIndex };
+                            // День мінімум: край не може перескочити протилежний.
+                            const next = clamp(day, 0, grab.endDay - 1);
+                            return rect(next, box.to, grab.resourceIndex);
                         }
 
                         if (grab.edge === "end") {
-                            const next = Math.min(Math.max(hit.slot.index + 1, start + 1), slots);
-                            return { slotIndex: start, slotSpan: next - start, resourceIndex: grab.resourceIndex };
+                            // Кінець ексклюзивний, тож день під вказівником
+                            // ще входить у подію — звідси +1.
+                            const next = clamp(day + 1, grab.startDay + 1, axis.length);
+                            return rect(box.from, next, grab.resourceIndex);
                         }
 
                         // Переїзд: бар, вивезений за край осі, не коротшає —
                         // він просто впирається.
-                        const span = grab.placed.slotSpan;
-                        const next = Math.min(Math.max(hit.slot.index - grab.grabOffset, 0), slots - span);
-                        return { slotIndex: next, slotSpan: span, resourceIndex: hit.resourceIndex };
+                        const span = box.to - box.from;
+                        const next = clamp(day - (grab.grabDay - box.from), 0, axis.length - span);
+                        return rect(next, next + span, hit.resourceIndex);
                     },
 
                     validate(grab, target) {
@@ -331,23 +368,19 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 if (grab === undefined) return;
 
                 const layout = ctx.getLayout();
-                const slots = layout.slots.length;
+                const axis = dayAxis(layout);
+                const box = visible(grab);
 
                 if (event.altKey) {
                     if (options.onResize === undefined || days === 0) return;
 
-                    const span = grab.placed.slotSpan + days;
-                    // День — мінімум, край осі — межа: ті самі правила, що й у жесті.
-                    if (span < 1 || grab.placed.slotIndex + span > slots) return;
+                    // День — мінімум, край осі — межа: ті самі правила, що й у
+                    // жесті, і так само в днях, а не в колонках.
+                    const next = box.to + days;
+                    if (next <= grab.startDay || next > axis.length) return;
 
                     grab.edge = "end";
-                    const target = {
-                        slotIndex: grab.placed.slotIndex,
-                        slotSpan: span,
-                        resourceIndex: grab.resourceIndex,
-                    };
-
-                    const resize = resizeOf(grab, target);
+                    const resize = resizeOf(grab, rect(box.from, next, grab.resourceIndex));
                     if (resize === null || !(options.canResize?.(resize) ?? true)) return;
 
                     event.preventDefault();
@@ -357,12 +390,10 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
 
                 if (options.onMove === undefined) return;
 
+                const span = box.to - box.from;
+                const from = clamp(box.from + days, 0, axis.length - span);
                 const target = {
-                    slotIndex: Math.min(
-                        Math.max(grab.placed.slotIndex + days, 0),
-                        slots - grab.placed.slotSpan,
-                    ),
-                    slotSpan: grab.placed.slotSpan,
+                    ...rect(from, from + span, 0),
                     resourceIndex: Math.min(Math.max(grab.resourceIndex + rows, 0), layout.rows.length - 1),
                 };
                 if (!changed(grab, target)) return;

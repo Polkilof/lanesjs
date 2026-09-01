@@ -1271,3 +1271,108 @@ describe("плагіни", () => {
         expect(seen).toEqual(["slots:31", "teardown"]);
     });
 });
+
+/**
+ * Тижневий крок — окремо від денного навмисно: саме тут колонка перестає
+ * дорівнювати дню, і саме тут жести ламались. Подія, коротша за тиждень, ні
+ * звужувалась, ні розтягувалась, а коли край таки перестрибував колонку,
+ * кінець опинявся раніше за початок — тобто плагін віддавав застосунку
+ * елемент, що порушує власний контракт.
+ */
+describe("жести при тижневому кроці (pro)", () => {
+    // 2026-03-01 — неділя, тож вісь починається з понеділка 2026-02-23.
+    // Колонка 70px на сім днів дає рівно 10px на день: 2026-03-03 — день 8.
+    const weekly = { step: "week" as const, slotWidth: 70, stretch: false };
+    const items: Item[] = [{ id: "i1", resourceId: "r1", start: "2026-03-03", end: "2026-03-06" }];
+
+    function fire(type: string, x: number, y: number, target: EventTarget) {
+        target.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, button: 0 }));
+    }
+
+    /** Бар займає всю колонку тижня: 70..140. jsdom розмірів сам не дає. */
+    function withBarRect(wrapper: ReturnType<typeof render>) {
+        const bar = wrapper.find(".rt__bar").element;
+        bar.getBoundingClientRect = () => ({ left: 70, right: 140, width: 70 }) as DOMRect;
+        return bar;
+    }
+
+    it("звужує подію на один день усередині тижня", async () => {
+        const sizes: DragResize[] = [];
+        const wrapper = render({ ...weekly, items, plugins: [drag({ onResize: (size) => sizes.push(size) })] });
+        await wrapper.vm.$nextTick();
+        const bar = withBarRect(wrapper);
+
+        // Правий край на день ліворуч: 2026-03-05 — це день 9, тобто 90..100px
+        fire("pointerdown", 138, 10, bar);
+        fire("pointermove", 94, 10, window);
+        fire("pointerup", 94, 10, window);
+
+        expect(sizes).toHaveLength(1);
+        expect(sizes[0].start).toBe("2026-03-03");
+        expect(sizes[0].end).toBe("2026-03-05");
+    });
+
+    it("не дає кінцю опинитись раніше за початок", async () => {
+        const sizes: DragResize[] = [];
+        const wrapper = render({ ...weekly, items, plugins: [drag({ onResize: (size) => sizes.push(size) })] });
+        await wrapper.vm.$nextTick();
+        const bar = withBarRect(wrapper);
+
+        // Правий край тягнемо аж за лівий край осі
+        fire("pointerdown", 138, 10, bar);
+        fire("pointermove", 0, 10, window);
+        fire("pointerup", 0, 10, window);
+
+        expect(sizes[0].start).toBe("2026-03-03");
+        expect(sizes[0].end).toBe("2026-03-04");
+    });
+
+    it("тягне лівий край по днях, а не по тижнях", async () => {
+        const sizes: DragResize[] = [];
+        const wrapper = render({ ...weekly, items, plugins: [drag({ onResize: (size) => sizes.push(size) })] });
+        await wrapper.vm.$nextTick();
+        const bar = withBarRect(wrapper);
+
+        fire("pointerdown", 72, 10, bar);
+        fire("pointermove", 64, 10, window);
+        fire("pointerup", 64, 10, window);
+
+        expect(sizes[0].edge).toBe("start");
+        expect(sizes[0].start).toBe("2026-03-01");
+        expect(sizes[0].end).toBe("2026-03-06");
+    });
+
+    it("переїзд рахує дні, а не колонки", async () => {
+        const moves: DragMove[] = [];
+        const wrapper = render({ ...weekly, items, plugins: [drag({ onMove: (move) => moves.push(move) })] });
+        await wrapper.vm.$nextTick();
+        const bar = wrapper.find(".rt__bar").element;
+        // Захват посередині бара, щоб це був переїзд, а не край
+        bar.getBoundingClientRect = () => ({ left: 70, right: 140, width: 70 }) as DOMRect;
+
+        fire("pointerdown", 105, 10, bar);
+        fire("pointermove", 125, 10, window);
+        fire("pointerup", 125, 10, window);
+
+        expect(moves).toHaveLength(1);
+        expect(moves[0].days).toBe(2);
+        expect(moves[0].start).toBe("2026-03-05");
+        expect(moves[0].end).toBe("2026-03-08");
+    });
+
+    it("виділення віддає дні, а не кількість колонок", async () => {
+        const created: DragCreate[] = [];
+        const wrapper = render({ ...weekly, plugins: [create({ onCreate: (made) => created.push(made) })] });
+        await wrapper.vm.$nextTick();
+        const body = wrapper.find(".rt__body").element;
+
+        fire("pointerdown", 84, 40, body);
+        fire("pointermove", 104, 40, window);
+        fire("pointerup", 104, 40, window);
+
+        expect(created).toHaveLength(1);
+        expect(created[0].days).toBe(3);
+        expect(created[0].start).toBe("2026-03-03");
+        expect(created[0].end).toBe("2026-03-06");
+    });
+});

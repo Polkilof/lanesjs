@@ -9,6 +9,7 @@
  *
  * Тека `pro/` імпортує з `core/` і `vue/`; назад — ніколи (див. README).
  */
+import { clamp, dayAxis, dayUnder } from "./days";
 import { guard } from "./license";
 import { makeGhost, trackPointer } from "./gesture";
 import type { Target } from "./gesture";
@@ -41,7 +42,8 @@ export interface CreateOptions<R = unknown> {
 
 /** Звідки почали тягнути. Рядок фіксується на старті й далі не змінюється. */
 interface Anchor {
-    slotIndex: number;
+    /** День осі, а не колонка: виділення має вміти починатись із середи. */
+    day: number;
     resourceIndex: number;
 }
 
@@ -63,18 +65,22 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
              * результат: порахувати двома шляхами означало б рано чи пізно
              * дозволити одне, а створити інше.
              *
-             * Межі беруться прямо з осі, а не зсувом у днях, як у переїзді:
-             * виділення й народилось із колонок, обрізати його краєм діапазону
-             * нема чому.
+             * Рахуємо в днях, а не в колонках: при кроці "week" колонка накриває
+             * сім днів, і виділення в колонках уміло б починатись лише з
+             * понеділка, а days рапортувало б кількість тижнів під виглядом
+             * кількості днів.
              */
             function rangeOf(anchor: Anchor, target: Target): DragCreate<R> | null {
                 const layout = ctx.getLayout();
                 const resource = layout.rows[anchor.resourceIndex]?.resource;
-                const first = layout.slots[target.slotIndex];
-                const last = layout.slots[target.slotIndex + target.slotSpan - 1];
-                if (resource === undefined || first === undefined || last === undefined) return null;
+                if (resource === undefined) return null;
 
-                return { resource, start: first.start, end: last.end, days: target.slotSpan };
+                const axis = dayAxis(layout);
+                const from = axis.dayOfSlot(target.slotIndex);
+                const to = axis.dayOfSlot(target.slotIndex + target.slotSpan);
+                if (to <= from) return null;
+
+                return { resource, start: axis.dateAt(from), end: axis.dateAt(to), days: to - from };
             }
 
             const unguard = guard(root);
@@ -92,20 +98,34 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
                         if (hit === null) return null;
 
-                        return { slotIndex: hit.slot.index, resourceIndex: hit.resourceIndex };
+                        const axis = dayAxis(ctx.getLayout());
+                        const day = dayUnder(event.clientX, overlay, ctx.getGeometry().slotWidth, axis.perSlot);
+
+                        return { day, resourceIndex: hit.resourceIndex };
                     },
 
                     track(anchor, event) {
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
                         if (hit === null) return null;
 
+                        const axis = dayAxis(ctx.getLayout());
+                        const day = clamp(
+                            dayUnder(event.clientX, overlay, ctx.getGeometry().slotWidth, axis.perSlot),
+                            0,
+                            axis.length - 1,
+                        );
+
                         // Рядок беремо з початку жесту: подія належить одному
                         // ресурсу, і вести виділення по діагоналі — значить
                         // питати, що ж воно тоді покриває.
-                        const from = Math.min(anchor.slotIndex, hit.slot.index);
-                        const to = Math.max(anchor.slotIndex, hit.slot.index);
+                        const from = Math.min(anchor.day, day);
+                        const to = Math.max(anchor.day, day) + 1;
 
-                        return { slotIndex: from, slotSpan: to - from + 1, resourceIndex: anchor.resourceIndex };
+                        return {
+                            slotIndex: axis.slotOf(from),
+                            slotSpan: axis.slotOf(to - from),
+                            resourceIndex: anchor.resourceIndex,
+                        };
                     },
 
                     validate(anchor, target) {
