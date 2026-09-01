@@ -1,0 +1,14 @@
+{
+    "extends": "@vue/tsconfig/tsconfig.dom.json",
+    "include": ["site/src/**/*.ts", "site/src/**/*.vue"],
+    "compilerOptions": {
+        "noEmit": true,
+        "strict": true,
+        "types": ["vite/client"],
+        "baseUrl": ".",
+        "paths": {
+            "lanesjs": ["./index.ts"],
+            "lanesjs/pro": ["./pro/index.ts"]
+        }
+    }
+}

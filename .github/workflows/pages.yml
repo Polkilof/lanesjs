@@ -1,0 +1,57 @@
+# Сторінка проєкту на GitHub Pages.
+#
+# Джерело Pages має бути виставлене в "GitHub Actions" (Settings -> Pages),
+# інакше цей workflow відпрацює, а адреса й далі віддаватиме 404: гілки
+# gh-pages тут немає й не буде.
+name: Pages
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+# Деплой один за раз, але черга не скасовується на льоту: обірваний деплой
+# лишив би сторінку в напівстані.
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - run: npm ci
+
+            # Типи сайту перевіряються тут, а не лише збіркою: Vite бачить
+            # тільки те, що не компілюється, а не те, що не сходиться.
+            - run: npm run types:site
+
+            - run: npm run build:site
+
+            - uses: actions/configure-pages@v5
+
+            - uses: actions/upload-pages-artifact@v3
+              with:
+                  path: site-dist
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - id: deployment
+              uses: actions/deploy-pages@v4

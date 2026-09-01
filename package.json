@@ -40,6 +40,10 @@
         "types": "vue-tsc -p tsconfig.json",
         "test": "vitest run",
         "check": "node scripts/lanes-boundary.mjs && node scripts/lanes-verify.mjs",
+        "dev:site": "vite --config vite.site.config.ts",
+        "build:site": "vite build --config vite.site.config.ts",
+        "preview:site": "vite preview --config vite.site.config.ts",
+        "types:site": "vue-tsc -p tsconfig.site.json",
         "prepublishOnly": "npm run build && npm test && npm run check"
     },
     "peerDependencies": {
