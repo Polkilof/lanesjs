@@ -90,6 +90,22 @@
             </div>
         </section>
 
+        <section id="teams" class="section">
+            <div class="wrap">
+                <div class="section__head">
+                    <p class="eyebrow">Another shape</p>
+                    <h2 class="section__title">Rows can be groups, and groups can fold</h2>
+                    <p class="section__lede">
+                        The same component with nothing added to it. Teams fold and unfold, and
+                        <strong>+</strong> opens a form of your own — because the component never decides
+                        which rows exist. A collapsed group is simply a shorter list of resources.
+                    </p>
+                </div>
+
+                <TeamDemo />
+            </div>
+        </section>
+
         <section id="features" class="section">
             <div class="wrap">
                 <div class="section__head">
@@ -240,6 +256,7 @@ import { ref } from "vue";
 import CodeBlock from "./components/CodeBlock.vue";
 import Icon from "./components/Icon.vue";
 import LiveDemo from "./components/LiveDemo.vue";
+import TeamDemo from "./components/TeamDemo.vue";
 import { useTheme } from "./theme";
 
 declare const __LANES_VERSION__: string;
