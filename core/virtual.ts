@@ -46,9 +46,25 @@ export function rowAt(offsets: number[], position: number): number {
 }
 
 /**
+ * How many rows an unmeasured render may draw. Enough to fill a tall screen at
+ * any sane row height, and few enough that drawing them costs nothing.
+ */
+export const UNMEASURED_ROWS = 40;
+
+/**
  * A viewport height of zero means there is nothing to measure - SSR, a hidden
- * tab or a test environment. Then everything is shown: better extra DOM than an
- * empty screen somewhere scrolling does not exist at all.
+ * tab or a test environment. Then the first screenful is shown, because both
+ * alternatives are worse: an empty table is worse where scrolling does not
+ * exist, and drawing every row is worse everywhere.
+ *
+ * Drawing every row used to be what happened here, and it was expensive in a
+ * way that never appeared on screen. The height is measured after the first
+ * render, so the first render of two thousand rows built two thousand rows of
+ * markup and removed all but twenty of them in the same flush - half a second,
+ * paid on every mount, for rows the browser never painted.
+ *
+ * The count is the same on the server and in the browser, so hydration matches;
+ * the real slice arrives as soon as the viewport has been measured.
  */
 export function visibleSlice(
     offsets: number[],
@@ -58,7 +74,7 @@ export function visibleSlice(
 ): RowSlice {
     const count = offsets.length - 1;
     if (count <= 0) return { start: 0, end: 0 };
-    if (viewportHeight <= 0) return { start: 0, end: count };
+    if (viewportHeight <= 0) return { start: 0, end: Math.min(count, UNMEASURED_ROWS) };
 
     const first = rowAt(offsets, scrollTop);
     const last = rowAt(offsets, scrollTop + viewportHeight);

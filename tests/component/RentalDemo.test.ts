@@ -55,7 +55,9 @@ describe("бюджет DOM", () => {
         const rows = wrapper.findAll(".rt__row").length;
         const total = wrapper.element.querySelectorAll("*").length;
 
-        expect(rows).toBe(300);
+        // У jsdom висоту вікна не зміряти, тож працює стеля нерозміряного
+        // рендера: 300 обраних рядків не означають 300 рядків у DOM.
+        expect(rows).toBeLessThanOrEqual(40);
         // 300 × 31 клітинка дала б 9300 елементів лише на сітку;
         // тримаємо стелю з запасом на бари й підписи
         expect(total).toBeLessThan(3000);

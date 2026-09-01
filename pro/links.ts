@@ -48,21 +48,38 @@ export function links<R = unknown, I = unknown>(options: LinksOptions): Plugin<R
             svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible";
             overlay.appendChild(svg);
 
-            function anchorOf(layout: Layout<R, I>, geometry: Geometry, id: string): Anchor | null {
+            /**
+             * Every bar's anchor, by event id, built once per repaint.
+             *
+             * Looking each one up by scanning the rows is the obvious way to
+             * write this and the wrong one: a link needs two anchors, so the
+             * drawing costs links times rows. At two thousand rows that was a
+             * second of scanning for twenty-nine milliseconds of drawing.
+             *
+             * The first bar carrying an id wins, as the scan gave the first row
+             * that held it. Ids are unique, so this only decides a case that is
+             * already broken.
+             */
+            function anchorsOf(layout: Layout<R, I>, geometry: Geometry): Map<string, Anchor> {
+                const anchors = new Map<string, Anchor>();
+
                 for (let row = 0; row < layout.rows.length; row++) {
-                    const placed = layout.rows[row].bars.find((candidate) => candidate.item.id === id);
-                    if (placed === undefined) continue;
-
                     const top = geometry.rowOffsets[row];
-                    const lane = geometry.barGap + placed.lane * (geometry.barHeight + geometry.barGap);
 
-                    return {
-                        left: placed.slotIndex * geometry.slotWidth,
-                        right: (placed.slotIndex + placed.slotSpan) * geometry.slotWidth,
-                        middle: top + lane + geometry.barHeight / 2,
-                    };
+                    for (const placed of layout.rows[row].bars) {
+                        if (anchors.has(placed.item.id)) continue;
+
+                        const lane = geometry.barGap + placed.lane * (geometry.barHeight + geometry.barGap);
+
+                        anchors.set(placed.item.id, {
+                            left: placed.slotIndex * geometry.slotWidth,
+                            right: (placed.slotIndex + placed.slotSpan) * geometry.slotWidth,
+                            middle: top + lane + geometry.barHeight / 2,
+                        });
+                    }
                 }
-                return null;
+
+                return anchors;
             }
 
             /**
@@ -80,15 +97,20 @@ export function links<R = unknown, I = unknown>(options: LinksOptions): Plugin<R
             }
 
             function draw() {
-                const layout = ctx.getLayout();
-                const geometry = ctx.getGeometry();
+                const links = options.links();
+                if (links.length === 0) {
+                    svg.replaceChildren();
+                    return;
+                }
+
+                const anchors = anchorsOf(ctx.getLayout(), ctx.getGeometry());
 
                 svg.replaceChildren();
 
-                for (const link of options.links()) {
-                    const from = anchorOf(layout, geometry, link.from);
-                    const to = anchorOf(layout, geometry, link.to);
-                    if (from === null || to === null) continue;
+                for (const link of links) {
+                    const from = anchors.get(link.from);
+                    const to = anchors.get(link.to);
+                    if (from === undefined || to === undefined) continue;
 
                     const path = document.createElementNS(SVG_NS, "path");
                     path.setAttribute("d", pathOf(from, to));

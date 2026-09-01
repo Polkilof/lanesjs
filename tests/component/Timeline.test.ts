@@ -550,9 +550,21 @@ describe("віртуалізація рядків", () => {
         return wrapper;
     }
 
-    it("без відомої висоти вікна рендерить усе", () => {
-        // SSR і тестове середовище: краще зайвий DOM, ніж порожній екран
-        expect(mount(Timeline, { props: { resources: many, items: [], range } }).findAll(".rt__row")).toHaveLength(200);
+    it("без відомої висоти вікна рендерить перший екран, а не все", () => {
+        // SSR і тестове середовище: висоту міряють після першого рендера, тож
+        // на ньому її ще нема. Порожній екран був би гірший, але й малювати
+        // дві сотні рядків, щоб лишити двадцять, теж: 40 — це стеля.
+        const rows = mount(Timeline, { props: { resources: many, items: [], range } }).findAll(".rt__row");
+
+        expect(rows).toHaveLength(40);
+        expect(rows.length).toBeLessThan(many.length);
+    });
+
+    it("коли рядків менше за стелю — рендерить усі", () => {
+        const few = many.slice(0, 7);
+        const wrapper = mount(Timeline, { props: { resources: few, items: [], range } });
+
+        expect(wrapper.findAll(".rt__row")).toHaveLength(7);
     });
 
     it("рендерить лише видимі рядки плюс запас", async () => {
@@ -1350,6 +1362,31 @@ describe("плагіни", () => {
             await wrapper.vm.$nextTick();
 
             expect(wrapper.find(".rt__links").element.querySelectorAll("path")).toHaveLength(0);
+        });
+
+        it("малює зв'язок до бару, якого нема в розмітці", async () => {
+            // Місце бару завжди обчислюване, навіть коли сам бар за межами
+            // видимого зрізу. Якби якорі збирали лише з намальованих рядків,
+            // стрілка на 60-й рядок зникла б — а зникати їй нема від чого.
+            const far = Array.from({ length: 60 }, (_, index) => ({
+                id: `r${index}`,
+                title: `Ресурс ${index}`,
+            }));
+            const ends: Item[] = [
+                { id: "first", resourceId: "r0", start: "2026-03-02", end: "2026-03-04" },
+                { id: "last", resourceId: "r59", start: "2026-03-06", end: "2026-03-08" },
+            ];
+
+            const wrapper = render({
+                resources: far,
+                items: ends,
+                minRowHeight: 30,
+                plugins: [links({ links: () => [{ from: "first", to: "last" }] })],
+            });
+            await wrapper.vm.$nextTick();
+
+            expect(wrapper.findAll(".rt__row").length).toBeLessThan(far.length);
+            expect(wrapper.find(".rt__links").element.querySelectorAll("path")).toHaveLength(2);
         });
 
         it("перемальовує, коли дані змінились", async () => {

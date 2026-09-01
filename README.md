@@ -696,10 +696,21 @@ Lanes renders on the server. There is no DOM access during setup or render:
 every measurement happens after mount, so `renderToString` produces the full
 table and the client takes over from there.
 
-Because the server has no viewport to measure, SSR output contains **every** row
-and **every** column — virtualization starts on the client, right after mount.
-For a screen's worth of data that is exactly what you want; for three hundred
-rows over a year it is a lot of HTML, and `<ClientOnly>` is the better trade.
+Because the server has no viewport to measure, SSR output holds the **first
+forty rows** and **every** column. Row virtualization proper starts on the
+client, the moment after mount when there is finally a viewport to measure
+against.
+
+Forty is enough to fill a tall screen, and it is the same number on both sides,
+so hydration matches. It is also why mounting two thousand rows is cheap: an
+unmeasured render that drew all of them would build two thousand rows of markup
+and drop all but a screenful in the same flush, before the browser painted any
+of it.
+
+The cost is that a visitor without JavaScript sees forty rows and no way to
+reach the rest. For a screen's worth of data that is no cost at all; where the
+whole table has to exist in the HTML, print it — `Ctrl+P` renders every row —
+and for three hundred rows over a year `<ClientOnly>` is still the better trade.
 
 In Nuxt, the stylesheet goes in the config and nothing else is needed:
 
