@@ -812,9 +812,11 @@ function barLabel(placed: PlacedItem<I>, resource: Resource<R>): string {
     const custom = props.itemLabel?.(placed, resource);
     if (custom !== undefined) return custom;
 
+    // Координати бара дробові при тижневому кроці, а тут потрібна саме
+    // колонка: підпис читає її дату.
     const slots = layout.value.slots;
-    const first = slots[placed.slotIndex];
-    const last = slots[placed.slotIndex + placed.slotSpan - 1];
+    const first = slots[Math.floor(placed.slotIndex)];
+    const last = slots[Math.ceil(placed.slotIndex + placed.slotSpan) - 1];
     if (first === undefined || last === undefined) return String(resource.title);
 
     return `${resource.title}, ${formatSpan(first.date, last.date)}`;

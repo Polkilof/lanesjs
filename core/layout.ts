@@ -70,9 +70,18 @@ function buildAxis(
     };
 }
 
-function slotIndexOf(epoch: number, axisStart: number, step: SlotStep): number {
-    const days = diffDays(axisStart, epoch);
-    return step === "week" ? Math.floor(days / 7) : days;
+/**
+ * Позиція дня в одиницях слота. Дробова при тижневому кроці, і це не недогляд:
+ * подія триває дні, а не тижні, і округлення до колонки означало б, що
+ * триденна бронь і тижнева малюються однаково — а зсунута на день не
+ * ворухнеться взагалі.
+ *
+ * Ціною цього координати перестали бути індексами масиву слотів: там, де
+ * потрібен саме слот, його беруть через Math.floor. Натомість бар лежить там,
+ * де він насправді.
+ */
+function slotAt(epoch: number, axisStart: number, step: SlotStep): number {
+    return diffDays(axisStart, epoch) / slotSize(step);
 }
 
 /**
@@ -95,13 +104,12 @@ function place<I>(
 
     const visibleStart = Math.max(start, axisStart);
     const visibleEnd = Math.min(end, axisEnd);
-    const slotIndex = slotIndexOf(visibleStart, axisStart, step);
-    const lastSlotIndex = slotIndexOf(addDays(visibleEnd, -1), axisStart, step);
+    const slotIndex = slotAt(visibleStart, axisStart, step);
 
     return {
         item,
         slotIndex,
-        slotSpan: Math.max(1, lastSlotIndex - slotIndex + 1),
+        slotSpan: slotAt(visibleEnd, axisStart, step) - slotIndex,
         lane: 0,
         clippedStart: start < axisStart,
         clippedEnd: end > axisEnd,

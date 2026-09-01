@@ -315,13 +315,18 @@ a limit.
 ```ts
 interface PlacedItem<M> {
     item: Item<M>;
-    slotIndex: number; // first visible column
-    slotSpan: number; // how many columns, always ≥ 1
+    slotIndex: number; // where it starts, in column units
+    slotSpan: number; // how many columns, always > 0
     lane: number; // stacking lane inside the row
     clippedStart: boolean; // starts before the visible range
     clippedEnd: boolean; // ends after it
 }
 ```
+
+At `step: "week"` those two are fractional — an event lasts days, a column
+lasts a week, so a three-day booking is `3 / 7` of a column and starts where it
+starts, not on the Monday. They are positions in column units, not indices into
+`slots`: take `Math.floor` where you need the column itself.
 
 `Slot` is one column: `{ index, start, end, date, isToday, isWeekend }`, where
 `date` is a local `Date` for formatting only.

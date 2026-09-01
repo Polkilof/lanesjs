@@ -138,6 +138,37 @@ describe("розміщення подій", () => {
         expect(placed.slotIndex).toBe(1);
         expect(placed.slotSpan).toBe(2);
     });
+
+    /**
+     * Округлення до цілої колонки означало б, що подія, зсунута на день, не
+     * ворухнеться, а триденна бронь виглядає як тижнева. Тримати таке в ядрі
+     * не можна: воно робить редагування при тижневому кроці невидимим.
+     */
+    it("подія, коротша за тиждень, займає частину колонки", () => {
+        const layout = build({ step: "week", items: [bar("a", "2026-03-04", "2026-03-07")] });
+        const placed = layout.rows[0].bars[0];
+
+        // Вісь стартує 23 лютого; 4 березня — це день 9, тобто 9/7 колонки
+        expect(placed.slotIndex).toBeCloseTo(9 / 7);
+        expect(placed.slotSpan).toBeCloseTo(3 / 7);
+    });
+
+    it("зсув на день зсуває бар, а не лишає його на місці", () => {
+        const before = build({ step: "week", items: [bar("a", "2026-03-04", "2026-03-07")] });
+        const after = build({ step: "week", items: [bar("a", "2026-03-05", "2026-03-08")] });
+
+        expect(after.rows[0].bars[0].slotIndex).toBeGreaterThan(before.rows[0].bars[0].slotIndex);
+    });
+
+    it("дві події в одному тижні не стають одна над одною, якщо не перетинаються в днях", () => {
+        const layout = build({
+            step: "week",
+            items: [bar("a", "2026-03-02", "2026-03-04"), bar("b", "2026-03-05", "2026-03-07")],
+        });
+
+        expect(layout.rows[0].laneCount).toBe(1);
+        expect(layout.rows[0].bars.map((placed) => placed.lane)).toEqual([0, 0]);
+    });
 });
 
 describe("доріжки", () => {
