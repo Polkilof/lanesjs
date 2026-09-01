@@ -194,7 +194,7 @@ import { buildBookings, buildRooms } from "../demo-data";
 import type { Booking, Room } from "../demo-data";
 import { useTheme } from "../theme";
 
-const ROW_COUNTS = [12, 60, 300];
+const ROW_COUNTS = [12, 60, 300, 2000];
 const HINT = "Click a booking, or turn on drag to move one";
 
 const { theme } = useTheme();

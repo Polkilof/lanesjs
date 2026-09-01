@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Lanes — OG card source</title>
+        <!--
+            Джерело картинки для превʼю посилання (og:image), 1200×630.
+
+            Лежить у репозиторії, а не робиться руками в редакторі, бо на ній
+            стоїть назва й обіцянка продукту: коли вони змінюються, картинку
+            треба перемалювати, і без джерела це означало б малювати заново.
+
+            Знімок робиться браузером у розмір вікна 1200×630 і кладеться в
+            site/public/og.png — звідти Vite копіює його в корінь сайту.
+        -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                position: relative;
+                width: 1200px;
+                height: 630px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                padding: 72px 80px;
+                overflow: hidden;
+                background: radial-gradient(120% 140% at 78% 0%, #20233a 0%, #121320 58%);
+                color: #eef0f7;
+                font-family: Inter, system-ui, sans-serif;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            .mark {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                font-size: 30px;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+            }
+
+            /* Той самий знак, що в шапці сайту: смуги різної довжини. */
+            .glyph {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+                width: 40px;
+            }
+
+            .glyph i {
+                height: 6px;
+                border-radius: 3px;
+                background: #8b6dff;
+            }
+
+            .glyph i:nth-child(2) {
+                width: 68%;
+                background: #2fb488;
+            }
+
+            .glyph i:nth-child(3) {
+                width: 42%;
+                background: #f0b03c;
+            }
+
+            h1 {
+                max-width: 15ch;
+                font-size: 68px;
+                font-weight: 600;
+                line-height: 1.05;
+                letter-spacing: -0.035em;
+                text-wrap: balance;
+            }
+
+            .lede {
+                margin-top: 22px;
+                max-width: 40ch;
+                font-size: 25px;
+                line-height: 1.4;
+                color: #a8adc4;
+            }
+
+            .foot {
+                display: flex;
+                align-items: center;
+                gap: 18px;
+                font-family: "JetBrains Mono", ui-monospace, monospace;
+                font-size: 21px;
+                color: #767d99;
+            }
+
+            .pill {
+                padding: 9px 16px;
+                border: 1px solid rgba(139, 109, 255, 0.32);
+                border-radius: 9px;
+                background: rgba(139, 109, 255, 0.14);
+                color: #b39bff;
+            }
+
+            /* Смуга таймлайна — щоб із превʼю було видно, що це таймлайн, а не
+               ще одна бібліотека з абстрактною обкладинкою. */
+            .strip {
+                position: absolute;
+                top: 250px;
+                right: 80px;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 10px;
+                opacity: 0.9;
+            }
+
+            .row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .bar {
+                height: 26px;
+                border-radius: 6px;
+                background: #262a41;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="mark">
+            <span class="glyph"><i></i><i></i><i></i></span>
+            Lanes
+        </div>
+
+        <div class="strip">
+            <div class="row">
+                <span class="bar" style="width: 88px"></span>
+                <span class="bar" style="width: 150px; background: #8b6dff"></span>
+                <span class="bar" style="width: 74px; background: #2fb488"></span>
+            </div>
+            <div class="row">
+                <span class="bar" style="width: 132px"></span>
+                <span class="bar" style="width: 118px; background: #f0b03c"></span>
+                <span class="bar" style="width: 62px"></span>
+            </div>
+            <div class="row">
+                <span class="bar" style="width: 56px"></span>
+                <span class="bar" style="width: 196px; background: #8b6dff"></span>
+                <span class="bar" style="width: 60px"></span>
+            </div>
+            <div class="row">
+                <span class="bar" style="width: 170px"></span>
+                <span class="bar" style="width: 96px; background: #2fb488"></span>
+                <span class="bar" style="width: 46px"></span>
+            </div>
+        </div>
+
+        <div>
+            <h1>A resource timeline that stays out of your way</h1>
+            <p class="lede">
+                Rows of people, rooms or machines. Bars your users drag, stretch and connect — over data the
+                component never touches.
+            </p>
+        </div>
+
+        <div class="foot">
+            <span class="pill">npm i lanesjs</span>
+            <span>Vue 3 · TypeScript · 7.3 kB gzipped</span>
+        </div>
+    </body>
+</html>

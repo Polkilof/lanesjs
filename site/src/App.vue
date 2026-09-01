@@ -74,7 +74,7 @@
             <div class="wrap hero__stage">
                 <LiveDemo />
                 <p class="hero__caption">
-                    Real component, real data, 300 rows on demand. Turn on
+                    Real component, real data, 2 000 rows and 9 000 bookings on demand. Turn on
                     <strong>Drag &amp; create</strong> and a small badge appears in the corner — that is the
                     entire difference an unpaid Pro licence makes.
                 </p>
@@ -300,7 +300,7 @@ async function copyInstall() {
 const STATS = [
     { value: "7.3 kB", label: "gzipped, component and all" },
     { value: "0", label: "runtime dependencies" },
-    { value: "300+", label: "rows without a DOM cell each" },
+    { value: "2 000", label: "rows, twelve of them in the DOM" },
     { value: "3.4+", label: "Vue, as a peer dependency" },
 ];
 
