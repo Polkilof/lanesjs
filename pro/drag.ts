@@ -102,7 +102,29 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             const overlay: HTMLElement = overlayEl;
             const edgeSize = options.edgeSize ?? 6;
 
-            let hovered: HTMLElement | null = null;
+            /**
+             * Tell the component which gestures are on, so it can show that a
+             * bar can be taken. Without a sign there is nothing to guess it
+             * from: the bar looks exactly like one in a timeline that moves
+             * nothing.
+             *
+             * It goes on the root as a data attribute rather than as a class on
+             * each bar, and not for tidiness: `class` on a bar is bound, so Vue
+             * rewrites it on every repaint and anything we added from outside
+             * would be gone with the first scroll. Nothing is bound to this
+             * attribute, so nobody rewrites it.
+             *
+             * The width of the edge zone travels the same way. The plugin owns
+             * that number - it is what `edgeAt` measures by - and the component
+             * has to draw the handle exactly that wide, or the eye and the
+             * gesture would disagree about where the edge is.
+             */
+            const gestures: string[] = [];
+            if (options.onMove !== undefined) gestures.push("move");
+            if (options.onResize !== undefined) gestures.push("resize");
+
+            root.dataset.gestures = gestures.join(" ");
+            root.style.setProperty("--rt-edge-size", `${edgeSize}px`);
 
             function findBar(id: string): Grab<R, I> | undefined {
                 const layout = ctx.getLayout();
@@ -144,19 +166,6 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 if (x - rect.left <= zone) return "start";
                 if (rect.right - x <= zone) return "end";
                 return null;
-            }
-
-            /** A cursor near the edge - otherwise nobody would guess stretching exists. */
-            function onHover(event: MouseEvent) {
-                const bar = (event.target as HTMLElement).closest<HTMLElement>(".rt__bar");
-                if (hovered !== null && hovered !== bar) {
-                    hovered.style.cursor = "";
-                    hovered = null;
-                }
-                if (bar === null) return;
-
-                bar.style.cursor = edgeAt(bar, event.clientX) === null ? "" : "ew-resize";
-                hovered = bar;
             }
 
             /**
@@ -414,13 +423,13 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                 options.onMove(move);
             }
 
-            root.addEventListener("pointermove", onHover);
             root.addEventListener("keydown", onKeydown);
             const unguard = guard(root);
 
             return () => {
-                root.removeEventListener("pointermove", onHover);
                 root.removeEventListener("keydown", onKeydown);
+                delete root.dataset.gestures;
+                root.style.removeProperty("--rt-edge-size");
                 untrack();
                 unguard();
             };

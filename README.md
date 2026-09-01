@@ -465,6 +465,7 @@ zero specificity (`:where`), so anything you write wins without `!important`:
 | `--rt-focus` | Focus ring on a bar |
 | `--rt-ghost-bg` / `--rt-ghost-line` | The drag preview: where the bar will land |
 | `--rt-ghost-invalid-bg` / `--rt-ghost-invalid-line` | The same preview over a forbidden target |
+| `--rt-edge-size` | Width of the resize handle; the `drag` plugin overwrites it with the zone it measures by |
 | `--rt-radius` | Bar corner radius |
 | `--rt-pane-gap` | Gap between the row-header panel and the grid |
 
@@ -578,6 +579,13 @@ const plugins = [
 | `longPress` | `400` ms | How long a finger must hold before a touch gesture starts. |
 | `edgeSize` | `6` px | Width of the resize zone at a bar's edge (wider for touch, never more than a third of the bar). |
 
+With `drag` installed the bars say so: the cursor becomes a grab hand, and
+hovering one reveals a handle at each edge, exactly as wide as the zone that
+responds. On touch, where there is no hover to reveal anything, the handles are
+simply always there. The plugin announces itself on the root as
+`data-gestures="move resize"` and the component draws from that, so styling it
+is ordinary CSS on your side — see [`--rt-edge-size`](#css-custom-properties).
+
 Moving and stretching live in one plugin because both start from the same grab:
 where you grabbed — edge or middle — decides which one it is. Creating by
 selection starts from empty space instead, so it is a [separate
@@ -611,6 +619,17 @@ so you can allow creating without allowing dragging. The plugin creates nothing
 itself: it reports the range and you decide whether to open a form or write
 straight to the database. It takes the same `className`, `threshold` and
 `longPress` options as `drag`.
+
+| Option | Default | |
+|---|---|---|
+| `onCreate` | — | Called on release with the resource and the two dates. |
+| `canCreate` | always allowed | Asked on every move. |
+| `doubleClick` | `false` | Also create a one-day event on a double click. |
+
+`doubleClick` is off by default on purpose: you are free to open your own form
+on `cell-click`, and having both on would give you a form and an event created
+behind it. Dragging cannot produce a single day on its own — a gesture needs
+movement past a threshold — so this is the only way to get one without aiming.
 
 ### history — undo and redo, over your data
 
@@ -747,9 +766,9 @@ Measured on the published build, minified and gzipped:
 
 | | Raw | Gzipped |
 |---|---|---|
-| `lanesjs` (component, axis, layout) | 24.2 kB | 7.5 kB |
-| `lanesjs/style.css` | 5.6 kB | 1.5 kB |
-| `lanesjs/pro` (all four plugins) | 18.0 kB | 5.5 kB |
+| `lanesjs` (component, axis, layout) | 24.0 kB | 7.3 kB |
+| `lanesjs/style.css` | 6.6 kB | 1.7 kB |
+| `lanesjs/pro` (all four plugins) | 19.8 kB | 6.1 kB |
 
 Two entry points, not one: if you never import `lanesjs/pro`, you never bundle
 it. `vue` is a peer dependency and stays external — a second copy in the bundle

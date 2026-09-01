@@ -41,7 +41,7 @@
             <div class="hero__glow" aria-hidden="true"></div>
 
             <div class="wrap hero__inner">
-                <p class="eyebrow">Vue 3 · TypeScript · 7.5 kB gzipped</p>
+                <p class="eyebrow">Vue 3 · TypeScript · 7.3 kB gzipped</p>
 
                 <h1 class="hero__title">
                     A resource timeline<br />
@@ -281,7 +281,7 @@ async function copyInstall() {
 }
 
 const STATS = [
-    { value: "7.5 kB", label: "gzipped, component and all" },
+    { value: "7.3 kB", label: "gzipped, component and all" },
     { value: "0", label: "runtime dependencies" },
     { value: "300+", label: "rows without a DOM cell each" },
     { value: "3.4+", label: "Vue, as a peer dependency" },

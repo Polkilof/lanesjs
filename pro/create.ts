@@ -39,6 +39,13 @@ export interface CreateOptions<R = unknown> {
     threshold?: number;
     /** How long to hold a finger for a touch gesture to begin; 400 ms by default. */
     longPress?: number;
+    /**
+     * Create a one-day event on a double click as well. Off by default, and
+     * that is deliberate: an application is free to open its own form on
+     * `cell-click`, and turning this on by default would give it both at once -
+     * a form and an event created behind it.
+     */
+    doubleClick?: boolean;
 }
 
 /** Where the drag started. The row is fixed at the start and never changes. */
@@ -143,7 +150,45 @@ export function create<R = unknown, I = unknown>(options: CreateOptions<R>): Plu
                 () => ctx.getGeometry(),
             );
 
+            /**
+             * A double click makes the shortest event there is - one day.
+             * Dragging cannot do that: a gesture needs movement past a
+             * threshold, and without it a click is a click. So this is not a
+             * shortcut for the same thing but the only way to get one day
+             * without aiming.
+             *
+             * The day is taken from under the pointer rather than from the
+             * slot: at the week step a slot is the Monday, and a double click
+             * on a Thursday would have created a Monday.
+             */
+            function onDoubleClick(event: MouseEvent) {
+                if ((event.target as HTMLElement).closest(".rt__bar") !== null) return;
+
+                const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
+                if (hit === null) return;
+
+                const axis = dayAxis(ctx.getLayout());
+                const day = clamp(
+                    dayUnder(event.clientX, overlay, ctx.getGeometry().slotWidth, axis.perSlot),
+                    0,
+                    Math.max(0, axis.length - 1),
+                );
+
+                const created: DragCreate<R> = {
+                    resource: hit.resource,
+                    start: axis.dateAt(day),
+                    end: axis.dateAt(day + 1),
+                    days: 1,
+                };
+                if (!(options.canCreate?.(created) ?? true)) return;
+
+                options.onCreate(created);
+            }
+
+            if (options.doubleClick === true) root.addEventListener("dblclick", onDoubleClick);
+
             return () => {
+                if (options.doubleClick === true) root.removeEventListener("dblclick", onDoubleClick);
                 untrack();
                 unguard();
             };

@@ -47,10 +47,12 @@ type IconName =
     | "calendar"
     | "shield"
     | "code"
-    | "external";
+    | "external"
+    | "close";
 
 const ICONS: Record<IconName, string[]> = {
     rows: ["M3 6h18", "M3 12h18", "M3 18h18"],
+    close: ["M6 6l12 12", "M18 6l-12 12"],
     bolt: ["M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"],
     package: ["M12 2 3 7v10l9 5 9-5V7l-9-5z", "M3 7l9 5 9-5", "M12 12v10"],
     keyboard: [

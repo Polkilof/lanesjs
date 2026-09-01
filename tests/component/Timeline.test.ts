@@ -689,6 +689,55 @@ describe("плагіни", () => {
             fire("pointerup", x, y, window);
         }
 
+        it("оголошує ввімкнені жести — інакше про них нема звідки дізнатись", async () => {
+            const wrapper = render({
+                items,
+                plugins: [drag({ onMove: () => {}, onResize: () => {} })],
+            });
+            await wrapper.vm.$nextTick();
+
+            const root = wrapper.find(".rt").element as HTMLElement;
+            expect(root.dataset.gestures).toBe("move resize");
+            expect(root.style.getPropertyValue("--rt-edge-size")).toBe("6px");
+        });
+
+        it("оголошує лише те, що справді ввімкнено", async () => {
+            const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
+            await wrapper.vm.$nextTick();
+
+            expect((wrapper.find(".rt").element as HTMLElement).dataset.gestures).toBe("move");
+        });
+
+        it("без плагіна бар не обіцяє нічого", async () => {
+            const wrapper = render({ items });
+            await wrapper.vm.$nextTick();
+
+            expect((wrapper.find(".rt").element as HTMLElement).dataset.gestures).toBeUndefined();
+        });
+
+        it("ширина вушка дорівнює зоні, яка справді відповідає", async () => {
+            const wrapper = render({
+                items,
+                plugins: [drag({ onResize: () => {}, edgeSize: 10 })],
+            });
+            await wrapper.vm.$nextTick();
+
+            expect((wrapper.find(".rt").element as HTMLElement).style.getPropertyValue("--rt-edge-size")).toBe(
+                "10px",
+            );
+        });
+
+        it("знятий плагін прибирає за собою обіцянку", async () => {
+            const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
+            await wrapper.vm.$nextTick();
+            const root = wrapper.find(".rt").element as HTMLElement;
+
+            wrapper.unmount();
+
+            expect(root.dataset.gestures).toBeUndefined();
+            expect(root.style.getPropertyValue("--rt-edge-size")).toBe("");
+        });
+
         it("віддає новий діапазон і ресурс, а даних не чіпає", async () => {
             const moves: DragMove[] = [];
             const wrapper = render({ items, plugins: [drag({ onMove: (move) => moves.push(move) })] });
@@ -861,16 +910,23 @@ describe("плагіни", () => {
             expect(moves[0].days).toBe(2);
         });
 
-        it("біля краю показує курсор розтягування", async () => {
+        /**
+         * Курсор і вушка біля краю тепер малює таблиця стилів компонента, а не
+         * плагін інлайном — те саме правило, що вже застосоване до привида:
+         * інлайн не перебити нічим, крім !important, і застосунок лишався б без
+         * права голосу. Сам вигляд у jsdom не перевірити: розкладки немає, а
+         * псевдоелементи не беруть участі у влучаннях. Тому перевіряємо те, від
+         * чого він залежить, і те, повернення чого було б регресом.
+         */
+        it("вигляд жесту не тримається інлайном", async () => {
             const wrapper = render({ items, plugins: [drag({ onResize: () => {} })] });
             await wrapper.vm.$nextTick();
             const bar = withBarRect(wrapper);
 
             fire("pointermove", 158, 10, bar);
-            expect(bar.style.cursor).toBe("ew-resize");
 
-            fire("pointermove", 100, 10, bar);
             expect(bar.style.cursor).toBe("");
+            expect((wrapper.find(".rt").element as HTMLElement).dataset.gestures).toBe("resize");
         });
 
         it("не починає тягнення, доки не перейдено поріг", async () => {
@@ -969,6 +1025,66 @@ describe("плагіни", () => {
             selectOn(wrapper, 100, 102);
 
             expect(created).toEqual([]);
+        });
+
+        it("подвійний клік робить подію на один день", async () => {
+            const created: DragCreate[] = [];
+            const wrapper = render({
+                plugins: [create({ onCreate: (range) => created.push(range), doubleClick: true })],
+            });
+            await wrapper.vm.$nextTick();
+
+            // 100px -> третя колонка
+            fire("dblclick", 100, 10, wrapper.find(".rt__row").element);
+
+            expect(created).toHaveLength(1);
+            expect(created[0].start).toBe("2026-03-03");
+            expect(created[0].end).toBe("2026-03-04");
+            expect(created[0].days).toBe(1);
+            expect(created[0].resource.id).toBe("r1");
+        });
+
+        it("без doubleClick подвійний клік нічого не робить", async () => {
+            const created: DragCreate[] = [];
+            const wrapper = render({ plugins: [create({ onCreate: (range) => created.push(range) })] });
+            await wrapper.vm.$nextTick();
+
+            fire("dblclick", 100, 10, wrapper.find(".rt__row").element);
+
+            expect(created).toEqual([]);
+        });
+
+        it("подвійний клік по бару не створює: там уже щось лежить", async () => {
+            const created: DragCreate[] = [];
+            const wrapper = render({
+                items,
+                plugins: [create({ onCreate: (range) => created.push(range), doubleClick: true })],
+            });
+            await wrapper.vm.$nextTick();
+
+            fire("dblclick", 60, 10, wrapper.find(".rt__bar").element);
+
+            expect(created).toEqual([]);
+        });
+
+        it("подвійний клік питає дозволу так само, як виділення", async () => {
+            const created: DragCreate[] = [];
+            const wrapper = render({
+                plugins: [
+                    create({
+                        onCreate: (range) => created.push(range),
+                        canCreate: (range) => range.end <= "2026-03-08",
+                        doubleClick: true,
+                    }),
+                ],
+            });
+            await wrapper.vm.$nextTick();
+
+            fire("dblclick", 600, 10, wrapper.find(".rt__row").element);
+            expect(created).toEqual([]);
+
+            fire("dblclick", 100, 10, wrapper.find(".rt__row").element);
+            expect(created).toHaveLength(1);
         });
     });
 

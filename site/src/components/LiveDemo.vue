@@ -1,5 +1,5 @@
 <template>
-    <div class="demo">
+    <div ref="rootRef" class="demo">
         <div class="demo__bar">
             <div class="demo__group demo__group--nav">
                 <button type="button" class="demo__icon" aria-label="Previous month" @click="prev">
@@ -132,6 +132,40 @@
             </template>
         </Timeline>
 
+        <!--
+            Картка над баром. Нічого спеціального для неї в бібліотеці немає:
+            вона стоїть за `target` із payload кліку — тим самим елементом бара.
+        -->
+        <div
+            v-if="popup !== null"
+            class="demo__popup"
+            role="dialog"
+            aria-label="Booking details"
+            :style="{ top: popup.top + 'px', left: popup.left + 'px', width: POPUP_WIDTH + 'px' }"
+        >
+            <div class="demo__popup-head">
+                <strong>{{ popup.item.meta?.guest }}</strong>
+                <button
+                    type="button"
+                    class="demo__popup-close"
+                    aria-label="Close"
+                    @click="popup = null"
+                >
+                    <Icon name="close" :size="14" />
+                </button>
+            </div>
+            <dl class="demo__popup-rows">
+                <dt>Room</dt>
+                <dd>{{ popup.room }}</dd>
+                <dt>Arrives</dt>
+                <dd>{{ popup.item.start }}</dd>
+                <dt>Leaves</dt>
+                <dd>{{ popup.item.end }}</dd>
+                <dt>Stay</dt>
+                <dd>{{ nights(popup.item.start, popup.item.end) }}</dd>
+            </dl>
+        </div>
+
         <p class="demo__log" role="status">
             <Icon :name="lastAction === '' ? 'calendar' : 'bolt'" :size="14" />
             <span>{{ lastAction === "" ? HINT : lastAction }}</span>
@@ -150,7 +184,7 @@
  * користувач щось переніс, а вирішує накладка moves. Так само зробить і
  * застосунок, який ходить по це в API.
  */
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { Timeline, diffDays, toEpoch, useTimelineRange } from "lanesjs";
 import { create, drag, history, links } from "lanesjs/pro";
 import type { Item, PlacedItem, Plugin, Resource, SlotStep } from "lanesjs";
@@ -170,6 +204,11 @@ const step = ref<SlotStep>("day");
 const editable = ref(false);
 const linked = ref(false);
 const lastAction = ref("");
+
+/** Картка прив'язується до бара, тож рахуємо від краю демо, а не сторінки. */
+const rootRef = ref<HTMLElement | null>(null);
+const POPUP_WIDTH = 232;
+const POPUP_HEIGHT = 168;
 
 const { range, title, prev, next, today } = useTimelineRange({ unit: "month", locale: "en-GB" });
 
@@ -252,6 +291,7 @@ const plugins = computed<Plugin<Room, Booking>[]>(() => {
             create<Room, Booking>({
                 onCreate: applyCreate,
                 canCreate: (created) => isFree(created.resource.id, created.start, created.end),
+                doubleClick: true,
             }),
             undoRedo,
         );
@@ -363,18 +403,76 @@ function bookingLabel(placed: PlacedItem<Booking>, resource: Resource<Room>): st
 }
 
 function onCellClick(payload: { date: string; resource: Resource<Room> }) {
+    popup.value = null;
     lastAction.value = "Empty cell: room " + payload.resource.title + ", " + payload.date;
 }
 
-function onItemClick(payload: { item: Item<Booking>; resource: Resource<Room> }) {
+/**
+ * Картка над баром. Показана тут, бо саме про це найчастіше питають, дивлячись
+ * на демо: чи можна відкрити щось своє поверх події.
+ *
+ * Нічого спеціального для цього в бібліотеці немає й не треба — у payload разом
+ * із подією приїжджає `target`, той самий елемент бара. Окреме поле не примха:
+ * `event.currentTarget` обнуляється, щойно діспатч завершився, тож збережена
+ * подія віддала б null саме тоді, коли картку треба поставити.
+ */
+interface Popup {
+    item: Item<Booking>;
+    room: string;
+    top: number;
+    left: number;
+}
+
+const popup = shallowRef<Popup | null>(null);
+
+function onItemClick(payload: {
+    item: Item<Booking>;
+    resource: Resource<Room>;
+    target: HTMLElement;
+}) {
     const item = payload.item;
     lastAction.value =
         item.meta?.guest + " in room " + payload.resource.title + ": " + span(item.start, item.end);
+
+    const host = rootRef.value;
+    if (host === null) return;
+
+    // Координати всередині демо, а не сторінки: картка лежить у ньому, тож
+    // прокрутка сторінки на неї вже не впливає.
+    const bar = payload.target.getBoundingClientRect();
+    const box = host.getBoundingClientRect();
+
+    // Демо обрізає вміст, тож картку, якій не вистачає місця знизу, ставимо
+    // над баром. Висота відома наперед: рядків у ній рівно чотири.
+    const below = bar.bottom - box.top + 8;
+    const top = below + POPUP_HEIGHT > box.height ? bar.top - box.top - POPUP_HEIGHT - 8 : below;
+
+    popup.value = {
+        item,
+        room: String(payload.resource.title),
+        top: Math.max(8, top),
+        left: Math.min(Math.max(bar.left - box.left, 8), box.width - POPUP_WIDTH - 8),
+    };
 }
+
+/** Escape закриває — на клавіатурі це єдиний вихід із картки. */
+function onKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") popup.value = null;
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+
+// Будь-яка зміна даних лишає картку не на місці: бронь могли пересунути або
+// скасувати, і бар під нею вже інший. Закриваємо, а не гадаємо.
+watch(bookings, () => {
+    popup.value = null;
+});
 </script>
 
 <style scoped>
 .demo {
+    position: relative;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--line);
@@ -382,6 +480,60 @@ function onItemClick(payload: { item: Item<Booking>; resource: Resource<Room> })
     background: var(--surface);
     box-shadow: var(--shadow-2);
     overflow: hidden;
+}
+
+/* Картка деталей: стоїть за баром, якого торкнулись. */
+.demo__popup {
+    position: absolute;
+    z-index: 6;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-2);
+    font-size: 0.8rem;
+}
+
+.demo__popup-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.demo__popup-close {
+    display: inline-flex;
+    padding: 0.2rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+.demo__popup-close:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.demo__popup-rows {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 0.75rem;
+    margin: 0;
+}
+
+.demo__popup-rows dt {
+    color: var(--text-2);
+}
+
+.demo__popup-rows dd {
+    margin: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .demo__bar {

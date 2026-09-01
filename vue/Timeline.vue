@@ -1165,6 +1165,10 @@ defineExpose(
     --rt-bar-text: #ffffff;
     /* The focus ring: it has to be visible both on a bar and against the grid. */
     --rt-focus: #1d4ed8;
+    /* How wide the edge of a bar is. The drag plugin overwrites this with the
+       number it actually measures by, so the handle covers the zone that
+       responds and not a pixel more. */
+    --rt-edge-size: 6px;
     /* The gesture ghost: where the bar will land if released here. A dashed
        outline and a transparent fill, so the days it covers stay visible
        underneath. */
@@ -1494,6 +1498,72 @@ defineExpose(
 }
 
 /**
+ * What tells the user a bar can be taken at all. Nothing here knows about the
+ * paid layer: the drag plugin writes `data-gestures` on the root, and these
+ * rules only react to it. With no plugin the attribute never appears and a bar
+ * stays exactly as it was.
+ *
+ * The handles are drawn by the component rather than by the plugin, for the
+ * same reason the ghost is: appearance kept in a plugin can only be inline, and
+ * inline beats every selector an application could write.
+ */
+.rt[data-gestures~="move"] .rt__bar {
+    cursor: grab;
+}
+
+.rt[data-gestures~="resize"] .rt__bar::before,
+.rt[data-gestures~="resize"] .rt__bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    /* Never wider than a third, exactly as the plugin clamps its own zone. */
+    width: min(var(--rt-edge-size), 33.3333%);
+    cursor: ew-resize;
+    /* currentColor, not a colour of its own: an application repaints a bar
+       through --rt-bar-bg and --rt-bar-text, and the handle has to stay
+       readable on whatever it repainted it to. */
+    background: linear-gradient(currentColor, currentColor) center / 2px 55% no-repeat;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+}
+
+.rt[data-gestures~="resize"] .rt__bar::before {
+    left: 0;
+}
+
+.rt[data-gestures~="resize"] .rt__bar::after {
+    right: 0;
+}
+
+.rt[data-gestures~="resize"] .rt__bar:hover::before,
+.rt[data-gestures~="resize"] .rt__bar:hover::after,
+.rt[data-gestures~="resize"] .rt__bar:focus-visible::before,
+.rt[data-gestures~="resize"] .rt__bar:focus-visible::after {
+    opacity: 0.55;
+}
+
+/**
+ * A finger has no hover, so there is nothing to reveal the handles - and the
+ * edge zone is wider there than under a mouse, that is, there is more invisible
+ * surface behaving specially. So on touch they are simply always visible.
+ */
+@media (hover: none) {
+    .rt[data-gestures~="resize"] .rt__bar::before,
+    .rt[data-gestures~="resize"] .rt__bar::after {
+        width: min(max(var(--rt-edge-size), 12px), 33.3333%);
+        opacity: 0.55;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rt[data-gestures~="resize"] .rt__bar::before,
+    .rt[data-gestures~="resize"] .rt__bar::after {
+        transition: none;
+    }
+}
+
+/**
  * The ring outside the bar rather than inside: a bar is narrow, and a border on
  * the inner edge would eat the label. `outline` takes no space, so the
  * neighbours do not move.
@@ -1552,6 +1622,12 @@ defineExpose(
 
     /* A scrollbar on a sheet of paper is just a grey line out of nowhere. */
     .rt .rt__scrollbar {
+        display: none;
+    }
+
+    /* Nothing is dragged on paper, and the handles would print as stray ticks. */
+    .rt .rt__bar::before,
+    .rt .rt__bar::after {
         display: none;
     }
 
