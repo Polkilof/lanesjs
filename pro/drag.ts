@@ -59,6 +59,20 @@ export interface DragOptions<R = unknown, I = unknown> {
      */
     canMove?: (move: DragMove<R, I>) => boolean;
     canResize?: (resize: DragResize<R, I>) => boolean;
+    /**
+     * Whether this item may be taken at all. Asked before the gesture starts,
+     * so an item nobody may drag behaves like the grid around it: no ghost, no
+     * dimmed bar, nothing to release. `canMove` and `canResize` answer a
+     * different question - whether *this target* is allowed - and answering
+     * "never" with them still drags a crossed-out ghost after the pointer,
+     * which reads as "not here" rather than "not this one".
+     *
+     * Items a timeline only displays are the usual reason: a birthday, an
+     * anniversary, someone else's row. The cursor over them stays the
+     * application's business - it draws bars through `item-class` and knows
+     * which ones it refuses.
+     */
+    canDrag?: (item: Item<I>, resource: Resource<R>) => boolean;
     /** A class on the ghost - so the application can style it its own way. */
     className?: string;
     /** How many pixels to travel before this counts as a gesture. */
@@ -277,6 +291,7 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
                         const grab = findBar(id);
                         const hit = ctx.hitTest({ x: event.clientX, y: event.clientY });
                         if (grab === undefined || hit === null) return null;
+                        if (!(options.canDrag?.(grab.placed.item, grab.resource) ?? true)) return null;
 
                         const edge = edgeAt(bar, event.clientX, event.pointerType === "touch");
                         // A gesture with no handler does not start: dragging a
@@ -383,6 +398,9 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
 
                 const grab = findBar(id);
                 if (grab === undefined) return;
+                // The keyboard is the same gesture by other means, so it is
+                // refused on the same ground.
+                if (!(options.canDrag?.(grab.placed.item, grab.resource) ?? true)) return;
 
                 const layout = ctx.getLayout();
                 const axis = dayAxis(layout);

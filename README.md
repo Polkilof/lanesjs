@@ -546,7 +546,10 @@ release. Permission and result are computed by the same function, so it is
 impossible to allow one thing and apply another.
 
 A gesture with no handler never starts: dragging a bar that cannot go anywhere
-is worse than not dragging it at all.
+is worse than not dragging it at all. The same goes for a single item your
+application will not let go of — a birthday, a holiday, someone else's row:
+`canDrag` refuses it before the gesture begins, so it behaves like the grid
+around it rather than dragging a crossed-out ghost that can never be dropped.
 
 And a gesture is never mistaken for a click. The browser fires one on release —
 at the row you started from — and without that click being eaten, every drag
@@ -572,6 +575,7 @@ const plugins = [
         },
         canMove: (move) => isFree(move),
         canResize: (resize) => isFree(resize),
+        canDrag: (item) => item.meta?.kind === "booking",
     }),
 ];
 ```
@@ -580,6 +584,7 @@ const plugins = [
 |---|---|---|
 | `onMove`, `onResize` | — | Called on release, when something actually changed. Omit one to disable that gesture. |
 | `canMove`, `canResize` | always allowed | Asked on every move. |
+| `canDrag` | everything draggable | Asked once, on the grab: whether this item may be taken at all. |
 | `className` | — | Extra class on the drag preview. |
 | `threshold` | `4` px | How far the pointer must travel before it counts as a gesture. |
 | `longPress` | `400` ms | How long a finger must hold before a touch gesture starts. |
@@ -608,8 +613,8 @@ may be clipped by the range, in which case its visible start is not its start.
 
 Keyboard equivalents, so that everything the mouse can do exists for the
 keyboard too: `Shift`+arrow moves the focused bar, `Alt`+arrow drags its edge.
-Both go through the same `canMove` / `canResize` — the keyboard is not a way
-around your rules.
+Both go through the same `canDrag` / `canMove` / `canResize` — the keyboard is
+not a way around your rules.
 
 ### create — drag across empty space
 
@@ -765,9 +770,11 @@ not read the clock.
 **Column width is ignored.** `slotWidth` is a minimum and columns stretch into
 spare space. Pass `:stretch="false"` for exact widths.
 
-**Dragging does nothing.** Three usual causes: the plugin was added to `plugins`
+**Dragging does nothing.** Four usual causes: the plugin was added to `plugins`
 after mount (change the component `key`), no `onMove` / `onResize` handler was
-given (a gesture with no handler never starts), or `canMove` returns false.
+given (a gesture with no handler never starts), `canDrag` refuses the item (no
+ghost appears at all), or `canMove` returns false (a crossed-out ghost follows
+the pointer).
 
 **On touch, nothing happens until I hold.** That is the design: the hold is what
 lets the page keep its scrolling. Tune it with `longPress`.

@@ -805,6 +805,46 @@ describe("плагіни", () => {
             expect(ghost.classes()).toContain("rt__ghost--invalid");
         });
 
+        it("не дає взяти те, що застосунок тягати не дозволяє", async () => {
+            const moves: DragMove[] = [];
+            const wrapper = render({
+                items,
+                plugins: [drag({ onMove: (move) => moves.push(move), canDrag: () => false })],
+            });
+            await wrapper.vm.$nextTick();
+
+            dragTo(wrapper, 180, 10);
+
+            // Жест не починався взагалі: ні привида, ні пригашеного бара —
+            // забороненого не видно, бо його ніхто й не брав.
+            expect(moves).toEqual([]);
+            expect(wrapper.find(".rt__ghost").exists()).toBe(false);
+            expect(wrapper.find(".rt__bar").classes()).not.toContain("rt__bar--dragging");
+        });
+
+        it("питає про сам елемент, а не про ціль", async () => {
+            const asked: string[] = [];
+            const wrapper = render({
+                items,
+                plugins: [
+                    drag({
+                        onMove: () => {},
+                        canDrag: (item) => {
+                            asked.push(item.id);
+                            return true;
+                        },
+                    }),
+                ],
+            });
+            await wrapper.vm.$nextTick();
+
+            dragTo(wrapper, 180, 10);
+
+            // Один раз на захваті, а не на кожному русі: це питання про
+            // елемент, і відповідь на нього посеред жесту не змінюється.
+            expect(asked).toEqual(["i1"]);
+        });
+
         it("жест не лишає по собі кліку — інакше форма відкривається сама", async () => {
             const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
             await wrapper.vm.$nextTick();
