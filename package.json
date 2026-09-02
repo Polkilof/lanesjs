@@ -1,6 +1,6 @@
 {
     "name": "lanesjs",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Resource timeline for Vue 3: virtualized rows, day and week axis, plugin hooks.",
     "type": "module",
     "license": "SEE LICENSE IN LICENSE.md",

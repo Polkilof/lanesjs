@@ -846,10 +846,18 @@ rather than the public tracker.
 
 ## Status
 
-`0.1.1` — in production in one application, API still allowed to move before
+`0.1.2` — in production in one application, API still allowed to move before
 `1.0`.
 
-`0.1.1` is a performance release and changes no API. A first render with nothing
+`0.1.2` is about gestures telling the truth. A drag no longer leaves a click
+behind: the browser fired one at the row on every release, so an application
+that opens a form on `cell-click` got that form after every gesture, including
+one the plugin had just refused. And `canDrag` refuses an item before the
+gesture starts, for bars a timeline only displays — a birthday, a holiday,
+someone else's row — instead of dragging a crossed-out ghost that can never be
+dropped. Both are additions; nothing that existed changed shape.
+
+`0.1.1` was a performance release and changed no API. A first render with nothing
 measured yet draws forty rows instead of every row, which is what SSR output now
 holds; mounting two thousand rows went from about 530ms to about 50ms. The
 `links` plugin indexes bars once per repaint instead of scanning the rows for
