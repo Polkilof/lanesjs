@@ -584,7 +584,7 @@ const plugins = [
 |---|---|---|
 | `onMove`, `onResize` | — | Called on release, when something actually changed. Omit one to disable that gesture. |
 | `canMove`, `canResize` | always allowed | Asked on every move. |
-| `canDrag` | everything draggable | Asked once, on the grab: whether this item may be taken at all. |
+| `canDrag` | everything draggable | Whether this item may be taken at all. Asked on the grab, and again on every repaint, to mark the bars that may not be. |
 | `className` | — | Extra class on the drag preview. |
 | `threshold` | `4` px | How far the pointer must travel before it counts as a gesture. |
 | `longPress` | `400` ms | How long a finger must hold before a touch gesture starts. |
@@ -596,6 +596,11 @@ responds. On touch, where there is no hover to reveal anything, the handles are
 simply always there. The plugin announces itself on the root as
 `data-gestures="move resize"` and the component draws from that, so styling it
 is ordinary CSS on your side — see [`--rt-edge-size`](#css-custom-properties).
+
+A bar your `canDrag` refuses says nothing of the sort: the plugin marks it
+`data-nodrag` after every repaint, and it keeps the plain pointer of a bar you
+can only click, with no handles at its edges. An affordance that holds only
+until you act on it is worse than none at all.
 
 Moving and stretching live in one plugin because both start from the same grab:
 where you grabbed — edge or middle — decides which one it is. Creating by
@@ -846,10 +851,18 @@ rather than the public tracker.
 
 ## Status
 
-`0.1.2` — in production in one application, API still allowed to move before
+`0.1.3` — in production in one application, API still allowed to move before
 `1.0`.
 
-`0.1.2` is about gestures telling the truth. A drag no longer leaves a click
+`0.1.3` finishes what `canDrag` started. Refusing the gesture was not enough
+while the cursor and the resize handles still offered it: they are drawn off
+`data-gestures` on the root, which knows nothing about individual bars, so a
+birthday turned the pointer into a grab hand and grew handles under it, and
+then refused to be taken. The plugin now marks what `canDrag` refuses with
+`data-nodrag` and the stylesheet takes both back. No API changed shape; a
+timeline without `canDrag` looks exactly as it did.
+
+`0.1.2` was about gestures telling the truth. A drag no longer leaves a click
 behind: the browser fired one at the row on every release, so an application
 that opens a form on `cell-click` got that form after every gesture, including
 one the plugin had just refused. And `canDrag` refuses an item before the
