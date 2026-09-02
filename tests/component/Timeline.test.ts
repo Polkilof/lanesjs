@@ -805,6 +805,48 @@ describe("плагіни", () => {
             expect(ghost.classes()).toContain("rt__ghost--invalid");
         });
 
+        it("жест не лишає по собі кліку — інакше форма відкривається сама", async () => {
+            const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
+            await wrapper.vm.$nextTick();
+
+            dragTo(wrapper, 180, 10);
+            // Браузер після відпускання шле click на спільного предка
+            // натискання й відпускання — це рядок.
+            fire("click", 180, 10, wrapper.find(".rt__row").element);
+
+            expect(wrapper.emitted("cell-click")).toBeUndefined();
+            expect(wrapper.emitted("item-click")).toBeUndefined();
+        });
+
+        it("відхилений жест теж не лишає кліку", async () => {
+            const wrapper = render({
+                items,
+                plugins: [drag({ onMove: () => {}, canMove: () => false })],
+            });
+            await wrapper.vm.$nextTick();
+
+            dragTo(wrapper, 180, 50);
+            fire("click", 180, 50, wrapper.findAll(".rt__row")[1].element);
+
+            // Найгірший випадок: тягнули те, що не переїде, і замість тиші
+            // отримували форму створення на порожньому місці.
+            expect(wrapper.emitted("cell-click")).toBeUndefined();
+        });
+
+        it("клік без жесту лишається кліком", async () => {
+            const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
+            await wrapper.vm.$nextTick();
+
+            // Натиснули й відпустили на місці — порога не перейдено, жесту не
+            // було, і забирати в застосунку клік нема за що.
+            const bar = wrapper.find(".rt__bar").element;
+            fire("pointerdown", 60, 10, bar);
+            fire("pointerup", 60, 10, window);
+            fire("click", 60, 10, wrapper.find(".rt__row").element);
+
+            expect(wrapper.emitted("cell-click")).toHaveLength(1);
+        });
+
         it("привид повторює силует бара, а не смугу рядка", async () => {
             const wrapper = render({ items, plugins: [drag({ onMove: () => {} })] });
             await wrapper.vm.$nextTick();

@@ -548,6 +548,12 @@ impossible to allow one thing and apply another.
 A gesture with no handler never starts: dragging a bar that cannot go anywhere
 is worse than not dragging it at all.
 
+And a gesture is never mistaken for a click. The browser fires one on release —
+at the row you started from — and without that click being eaten, every drag
+would end by opening whatever your `cell-click` opens, refused drags included.
+Listeners above the table still see it, so your own "click outside" handlers
+keep working.
+
 ### drag — move and stretch
 
 ```ts

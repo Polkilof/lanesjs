@@ -246,13 +246,50 @@ export function trackPointer<S>(gesture: PointerGesture<S>, ghost: Ghost, geomet
         show(event, true);
     }
 
+    /**
+     * A gesture is not a click, but the browser thinks otherwise: after the
+     * release it fires one at the nearest common ancestor of the press and the
+     * release - a row, or the grid. The component turns that into `cell-click`
+     * or `item-click`, so an application that opens a form there gets the form
+     * in the face after every drag, including one it has just refused.
+     *
+     * So the click that closes a gesture is eaten: one listener on the root in
+     * the capture phase, gone by the next task whether the click arrived or
+     * not. The timer is what keeps it honest - a release outside the table
+     * produces no click here at all, and a listener left waiting would swallow
+     * the next real one.
+     *
+     * On the root rather than on the window, and that is the point: everything
+     * above it - an application's own "click outside" listeners, its overlays -
+     * still sees the click and goes on closing what it closes. Only the table's
+     * own handlers, the ones that would read the gesture as a click, do not.
+     */
+    function swallowClick() {
+        function onClick(event: MouseEvent) {
+            event.stopPropagation();
+            event.preventDefault();
+            release();
+        }
+
+        function release() {
+            root.removeEventListener("click", onClick, true);
+        }
+
+        root.addEventListener("click", onClick, true);
+        setTimeout(release, 0);
+    }
+
     function onPointerUp(event: PointerEvent) {
         if (state === null || foreign(event)) return;
 
         const finished = state;
         const finishedTarget = target;
+        // Whether the gesture really began, not whether it changed anything: a
+        // refused target ends the same way, with a click nobody asked for.
+        const gestured = active;
         reset();
 
+        if (gestured) swallowClick();
         if (finishedTarget !== null) gesture.commit(finished, finishedTarget);
     }
 
