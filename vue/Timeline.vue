@@ -551,8 +551,14 @@ const slice = computed(() =>
  * geometry are watched: after a change of day width the picture is different
  * even though the layout is the same. flush: "post" so that a plugin draws
  * against the already updated DOM.
+ *
+ * The visible slice is watched for the same reason, even though the layout has
+ * not changed: a plugin that touches the bars themselves - rather than the
+ * overlay - sees brand new elements after a scroll, and the ones scrolled away
+ * are gone. Firing only on layout would leave everything scrolled into view
+ * untouched.
  */
-watch([layout, slotWidth, offsets], () => notify("layout", layout.value), { flush: "post" });
+watch([layout, slotWidth, offsets, slice], () => notify("layout", layout.value), { flush: "post" });
 
 interface VisibleRow {
     row: Row<R, I>;
@@ -1509,6 +1515,23 @@ defineExpose(
  */
 .rt[data-gestures~="move"] .rt__bar {
     cursor: grab;
+}
+
+/**
+ * A bar the application refuses to let go of. The plugin marks it after every
+ * repaint, and everything the gestures promise is taken back here: an
+ * affordance kept only until you act on it is worse than none at all.
+ *
+ * Back to `pointer` rather than to `default`: such a bar is still a button - it
+ * answers a click like every other one - and only the grip is gone.
+ */
+.rt[data-gestures] .rt__bar[data-nodrag] {
+    cursor: pointer;
+}
+
+.rt[data-gestures~="resize"] .rt__bar[data-nodrag]::before,
+.rt[data-gestures~="resize"] .rt__bar[data-nodrag]::after {
+    display: none;
 }
 
 .rt[data-gestures~="resize"] .rt__bar::before,

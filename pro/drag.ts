@@ -140,6 +140,38 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             root.dataset.gestures = gestures.join(" ");
             root.style.setProperty("--rt-edge-size", `${edgeSize}px`);
 
+            /**
+             * The affordances have to answer the same question as the gesture.
+             * The cursor and the edge handles are drawn off `data-gestures` on
+             * the root, which says nothing about individual bars - so a bar
+             * `canDrag` refuses is marked, and the stylesheet leaves it alone.
+             * Without this a birthday says "take me, stretch me" with the
+             * cursor and the handles, and then refuses to be taken.
+             *
+             * Marked after every repaint rather than once: rows are virtualized,
+             * and the element that showed one bar a scroll ago shows another
+             * now. The ids are indexed in one pass for the same reason the
+             * links plugin does it - asking the layout per bar turns a repaint
+             * into a quadratic scan.
+             */
+            function markBars() {
+                const canDrag = options.canDrag;
+                if (canDrag === undefined) return;
+
+                const owners = new Map<string, { item: Item<I>; resource: Resource<R> }>();
+                for (const row of ctx.getLayout().rows) {
+                    for (const placed of row.bars) {
+                        owners.set(placed.item.id, { item: placed.item, resource: row.resource });
+                    }
+                }
+
+                for (const bar of root.querySelectorAll<HTMLElement>(".rt__bar")) {
+                    const owner = bar.dataset.item === undefined ? undefined : owners.get(bar.dataset.item);
+                    const draggable = owner !== undefined && canDrag(owner.item, owner.resource);
+                    bar.toggleAttribute("data-nodrag", !draggable);
+                }
+            }
+
             function findBar(id: string): Grab<R, I> | undefined {
                 const layout = ctx.getLayout();
                 const axis = dayAxis(layout);
@@ -442,12 +474,17 @@ export function drag<R = unknown, I = unknown>(options: DragOptions<R, I> = {}):
             }
 
             root.addEventListener("keydown", onKeydown);
+            const unmark = ctx.on("layout", markBars);
             const unguard = guard(root);
 
             return () => {
                 root.removeEventListener("keydown", onKeydown);
                 delete root.dataset.gestures;
                 root.style.removeProperty("--rt-edge-size");
+                for (const bar of root.querySelectorAll<HTMLElement>(".rt__bar")) {
+                    bar.removeAttribute("data-nodrag");
+                }
+                unmark();
                 untrack();
                 unguard();
             };

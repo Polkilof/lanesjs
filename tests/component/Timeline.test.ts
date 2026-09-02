@@ -838,11 +838,33 @@ describe("плагіни", () => {
             });
             await wrapper.vm.$nextTick();
 
+            // Позначення барів питає те саме на кожному перемальовуванні; тут
+            // цікавить лише те, що спитав сам жест.
+            asked.length = 0;
+
             dragTo(wrapper, 180, 10);
 
             // Один раз на захваті, а не на кожному русі: це питання про
             // елемент, і відповідь на нього посеред жесту не змінюється.
             expect(asked).toEqual(["i1"]);
+        });
+
+        it("позначає бар, який брати не можна, щоб курсор і вушка його оминули", async () => {
+            const pair: Item[] = [
+                { id: "i1", resourceId: "r1", start: "2026-03-02", end: "2026-03-05" },
+                { id: "i2", resourceId: "r2", start: "2026-03-02", end: "2026-03-05" },
+            ];
+            const wrapper = render({
+                items: pair,
+                plugins: [drag({ onMove: () => {}, canDrag: (item: Item) => item.id === "i1" })],
+            });
+            await wrapper.vm.$nextTick();
+
+            // Курсор і вушка малюються за атрибутом на корені — однаково для
+            // всіх барів. Без позначки заборонений бар обіцяв би жест, якого не
+            // буде: саме це й видно було на дні народження.
+            const marked = wrapper.findAll(".rt__bar").map((bar) => bar.attributes("data-nodrag") !== undefined);
+            expect(marked).toEqual([false, true]);
         });
 
         it("жест не лишає по собі кліку — інакше форма відкривається сама", async () => {
