@@ -851,8 +851,14 @@ rather than the public tracker.
 
 ## Status
 
-`0.1.3` — in production in one application, API still allowed to move before
-`1.0`.
+`1.0.0` — in production in one application for two months without a single
+report against it.
+
+`1.0.0` changes no code. It changes what the version number promises: from here
+on the library follows semver, and everything this file calls part of the
+contract — props, events, slots, the plugin API, the CSS tokens and the public
+class names — changes shape only in `2.0`. Additions arrive in minor releases,
+fixes in patches. Upgrading from `0.1.3` is a version bump and nothing else.
 
 `0.1.3` finishes what `canDrag` started. Refusing the gesture was not enough
 while the cursor and the resize handles still offered it: they are drawn off

@@ -238,8 +238,7 @@
                 </p>
 
                 <p class="licence__fine">
-                    That is an introductory price, and it says so because the API is still allowed to move
-                    before 1.0. Keys are issued by hand until the store is up. Read
+                    Keys are issued by hand until the store is up. Read
                     <a :href="LICENCE_FILE" rel="noreferrer">LICENSE.md</a> for the terms; the short version is
                     that you may build anything with the free half, including commercial products, but may not
                     republish it as a library of its own.
@@ -285,7 +284,7 @@
         <div class="wrap foot__inner">
             <p class="foot__left">
                 <strong>Lanes</strong>
-                <span>v{{ VERSION }} · in production in one application, API still allowed to move before 1.0</span>
+                <span>v{{ VERSION }} · in production in one application, semver from 1.0</span>
             </p>
 
             <nav class="foot__links" aria-label="Project links">
@@ -333,14 +332,14 @@ const CONTACT_EMAIL = "alex.kup.work@gmail.com";
 const MAINTAINER = "Oleksandr Kupriyanov";
 
 /**
- * Вступна ціна на час 0.x. Половина від найближчого аналога з тією ж моделлю
- * (FullCalendar Premium, $480) — і не тому, що компонент удвічі гірший, а тому
- * що поруч є безкоштовний Vue-native конкурент, а в нас 0.1.0 і одне
- * впровадження. Під $250 покупку проводить сам розробник, без закупівель;
- * для одноосібного вендора це важить більше за маржу.
+ * Половина від найближчого аналога з тією ж моделлю (FullCalendar Premium,
+ * $480) — і не тому, що компонент удвічі гірший, а тому що поруч є безкоштовний
+ * Vue-native конкурент, а в нас одне впровадження. Під $250 покупку проводить
+ * сам розробник, без закупівель; для одноосібного вендора це важить більше за
+ * маржу.
  *
- * Що "introductory" написано вголос — теж рішення: підняти ціну на 1.0 тоді
- * буде виконанням обіцянки, а не зміною правил заднім числом.
+ * До 1.0 ціна називалась вступною. На 1.0 її лишили, а слово прибрали: репутації
+ * для підняття одне впровадження ще не дає, а обіцянка була «може піднятися».
  */
 const PRO_PRICE = "$199";
 const PRO_TERMS = "Per developer. Perpetual licence, one year of updates.";
